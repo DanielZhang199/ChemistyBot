@@ -1,4 +1,4 @@
-﻿Element Name,Symbol,Atomic Number,Ionic Charges (most to least stable),Molar Mass,Group ,Electronegitivity,State at SATP
+﻿Element Name,Symbol,Atomic Number,Ionic Charges (most to least stable),Molar Mass,Group ,Electronegativity,State at SATP
 Hydrogen,H,1,1+,1.01,1,2.2,Gas
 Helium,He,2,,4.00,18,,Gas
 Lithium,Li,3,1+,6.94,1,1,Metallic Solid
@@ -69,7 +69,7 @@ Holmium,Ho,67,3+,164.93,Lanthanides,1.2,Metallic Solid
 Erbium,Er,68,3+,167.26,Lanthanides,1.2,Metallic Solid
 Thulium,Tm,69,3+,168.93,Lanthanides,1.3,Metallic Solid
 Ytterbium,Yb,70,2+ 3+,173.04,Lanthanides,,Metallic Solid
-Luteium,Lu,71,3+,174.97,Lanthanides,1,Metallic Solid
+Lutetium,Lu,71,3+,174.97,Lanthanides,1,Metallic Solid
 Hafnium,Hf,72,4+,178.49,4,1.3,Metallic Solid
 Tantalum,Ta,73,5+,180.95,5,1.5,Metallic Solid
 Tungsten,W,74,4+ 6+,183.84,6,1.7,Metallic Solid
@@ -91,7 +91,7 @@ Actinium,Ac,89,3+,227,Actinides,1.1,Metallic Solid
 Thorium,Th,90,4+,232.04,Actinides,1.3,Metallic Solid
 Protactinium,Pa,91,4+ 5+,231.04,Actinides,1.5,Metallic Solid
 Uranium,U,92,4+ 6+,238.03,Actinides,1.7,Metallic Solid
-Neptnium,Np,93,5+,237,Actinides,1.3,Metallic Solid
+Neptunium,Np,93,5+,237,Actinides,1.3,Metallic Solid
 Plutonium,Pu,94,4+ 6+,244,Actinides,1.3,Metallic Solid
 Americium,Am,95,3+ 4+,243,Actinides,,Metallic Solid
 Curium,Cm,96,3+,247,Actinides,,Metallic Solid
@@ -108,11 +108,11 @@ Seaborgium,Sg,106,,269,6,,Metallic Solid
 Bohrium,Bh,107,,270,7,,Metallic Solid
 Hassium,Hs,108,,269,8,,Metallic Solid
 Meitnerium,Mt,109,,278,9,,Metallic Solid
-Darrnstadtium,Ds,110,,281,10,,Metallic Solid
+Darmstadtium,Ds,110,,281,10,,Metallic Solid
 Roentgenium,Rg,111,,282,11,,Metallic Solid
 Copernicium,Cn,112,,285,12,,Metallic Solid
 Nihonium,Nh,113,,286,13,,Metallic Solid
-Fleovium,Fl,114,,289,14,,Metallic Solid
+Flerovium,Fl,114,,289,14,,Metallic Solid
 Moscovium,Mc,115,,290,15,,Metallic Solid
 Livermorium,Lv,116,,293,16,,Metallic Solid
 Tennessine,Ts,117,,294,17,,Metallic Solid
