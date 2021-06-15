@@ -41,7 +41,7 @@ Yttrium,Y,39,3+,88.91,3,1.2,Metallic Solid
 Zirconium,Zr,40,4+,91.22,4,1.3,Metallic Solid
 Niobium,Nb,41,3+ 5+,92.91,5,1.6,Metallic Solid
 Molybdenum,Mo,42,6+,95.94,6,2.2,Metallic Solid
-Technetium,Tc,43,7+,98,7,2.1,Metallic Solid
+Technetium,Tc,43,7+,(98),7,2.1,Metallic Solid
 Ruthenium,Ru,44,3+,101.07,8,2.2,Metallic Solid
 Rhodium,Rh,45,3+,102.91,9,2.3,Metallic Solid
 Palladium,Pd,46,2+ 3+,106.42,10,2.2,Metallic Solid
@@ -59,7 +59,7 @@ Lanthanum,La,57,3+,138.91,Lanthanides,1.1,Metallic Solid
 Cerium,Ce,58,3+ 4+,140.12,Lanthanides,1.1,Metallic Solid
 Praseodymium,Pr,59,3+,140.91,Lanthanides,1.1,Metallic Solid
 Neodymium,Nd,60,3+,144.24,Lanthanides,1.1,Metallic Solid
-Promethium,Pm,61,3+,145,Lanthanides,,Metallic Solid
+Promethium,Pm,61,3+,(145),Lanthanides,,Metallic Solid
 Samarium,Sm,62,2+ 3+,150.36,Lanthanides,1.2,Metallic Solid
 Europium,Eu,63,2+ 3+,151.96,Lanthanides,,Metallic Solid
 Gadolinium,Gd,64,3+,157.25,Lanthanides,1.2,Metallic Solid
@@ -82,38 +82,38 @@ Mercury,Hg,80,2+,200.59,12,1.9,Liquid
 Thallium,Tl,81,1+ 3+,204.38,13,1.8,Metallic Solid
 Lead,Pb,82,2+ 4+,207.2,14,1.8,Metallic Solid
 Bismuth,Bi,83,3+ 5+,208.98,15,1.9,Metallic Solid
-Polonium,Po,84,2+ 4+,209,16,2,Metallic Solid
-Astatine,At,85,1-,210,17,2.2,Non-Metallic Solid
-Radon,Rn,86,,222,18,,Gas
-Francium,Fr,87,1+,223,1,0.7,Metallic Solid
-Radium,Ra,88,2+,226,2,0.9,Metallic Solid
-Actinium,Ac,89,3+,227,Actinides,1.1,Metallic Solid
+Polonium,Po,84,2+ 4+,(209),16,2,Metallic Solid
+Astatine,At,85,1-,(210),17,2.2,Non-Metallic Solid
+Radon,Rn,86,,(222),18,,Gas
+Francium,Fr,87,1+,(223),1,0.7,Metallic Solid
+Radium,Ra,88,2+,(226),2,0.9,Metallic Solid
+Actinium,Ac,89,3+,(227),Actinides,1.1,Metallic Solid
 Thorium,Th,90,4+,232.04,Actinides,1.3,Metallic Solid
 Protactinium,Pa,91,4+ 5+,231.04,Actinides,1.5,Metallic Solid
 Uranium,U,92,4+ 6+,238.03,Actinides,1.7,Metallic Solid
-Neptunium,Np,93,5+,237,Actinides,1.3,Metallic Solid
-Plutonium,Pu,94,4+ 6+,244,Actinides,1.3,Metallic Solid
-Americium,Am,95,3+ 4+,243,Actinides,,Metallic Solid
-Curium,Cm,96,3+,247,Actinides,,Metallic Solid
-Berkelium,Bk,97,3+ 4+,247,Actinides,,Metallic Solid
-Californium,Cf,98,3+ ,251,Actinides,,Metallic Solid
-Einsteinium,Es,99,3+,252,Actinides,,Metallic Solid
-Fermium,Fm,100,3+,257,Actinides,,Metallic Solid
-Mendelevium,Md,101,2+ 3+,258,Actinides,,Metallic Solid
-Nobelium,No,102,2+ 3+,259,Actinides,,Metallic Solid
-Lawrencium,Lr,103,3+,266,Actinides,,Metallic Solid
-Rutherfordium,Rf,104,,267,4,,Metallic Solid
-Dubnium,Db,105,,268,5,,Metallic Solid
-Seaborgium,Sg,106,,269,6,,Metallic Solid
-Bohrium,Bh,107,,270,7,,Metallic Solid
-Hassium,Hs,108,,269,8,,Metallic Solid
-Meitnerium,Mt,109,,278,9,,Metallic Solid
-Darmstadtium,Ds,110,,281,10,,Metallic Solid
-Roentgenium,Rg,111,,282,11,,Metallic Solid
-Copernicium,Cn,112,,285,12,,Metallic Solid
-Nihonium,Nh,113,,286,13,,Metallic Solid
-Flerovium,Fl,114,,289,14,,Metallic Solid
-Moscovium,Mc,115,,290,15,,Metallic Solid
-Livermorium,Lv,116,,293,16,,Metallic Solid
-Tennessine,Ts,117,,294,17,,Metallic Solid
-Oganesson,Og,118,,294,18,,Non-Metallic Solid
+Neptunium,Np,93,5+,(237),Actinides,1.3,Metallic Solid
+Plutonium,Pu,94,4+ 6+,(244),Actinides,1.3,Metallic Solid
+Americium,Am,95,3+ 4+,(243),Actinides,,Metallic Solid
+Curium,Cm,96,3+,(247),Actinides,,Metallic Solid
+Berkelium,Bk,97,3+ 4+,(247),Actinides,,Metallic Solid
+Californium,Cf,98,3+ ,(251),Actinides,,Metallic Solid
+Einsteinium,Es,99,3+,(252),Actinides,,Metallic Solid
+Fermium,Fm,100,3+,(257),Actinides,,Metallic Solid
+Mendelevium,Md,101,2+ 3+,(258),Actinides,,Metallic Solid
+Nobelium,No,102,2+ 3+,(259),Actinides,,Metallic Solid
+Lawrencium,Lr,103,3+,(266),Actinides,,Metallic Solid
+Rutherfordium,Rf,104,,(267),4,,Metallic Solid
+Dubnium,Db,105,,(268),5,,Metallic Solid
+Seaborgium,Sg,106,,(269),6,,Metallic Solid
+Bohrium,Bh,107,,(270),7,,Metallic Solid
+Hassium,Hs,108,,(269),8,,Metallic Solid
+Meitnerium,Mt,109,,(278),9,,Metallic Solid
+Darmstadtium,Ds,110,,(281),10,,Metallic Solid
+Roentgenium,Rg,111,,(282),11,,Metallic Solid
+Copernicium,Cn,112,,(285),12,,Metallic Solid
+Nihonium,Nh,113,,(286),13,,Metallic Solid
+Flerovium,Fl,114,,(289),14,,Metallic Solid
+Moscovium,Mc,115,,(290),15,,Metallic Solid
+Livermorium,Lv,116,,(293),16,,Metallic Solid
+Tennessine,Ts,117,,(294),17,,Metallic Solid
+Oganesson,Og,118,,(294),18,,Non-Metallic Solid
