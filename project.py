@@ -20,11 +20,9 @@ POLYATOMIC_IONS = 'polyatomic_ions.csv'
 Subscript = {"1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "0": "₀", }
 
 
-# coroutines
-
+# coroutines (events)
 
 @Bot.event
-# all events must be asynchronous (so all of the program code will be written asynchronously)
 async def on_ready():
     await Bot.change_presence(
         activity=discord.Activity(type=discord.ActivityType.listening, name='your every command | +help')
@@ -36,6 +34,7 @@ async def on_ready():
 async def on_disconnect():
     print(f"{Bot.user} has disconnected")
 
+# inputs/outputs
 
 @Bot.command(name='help')  # custom help command
 async def help_message(ctx):
@@ -54,15 +53,17 @@ async def help_message(ctx):
     embed.add_field(name="Actual Commands (WIP)",
                     value='''
 ```
-+database (Element/Ion) (symbol): Get data of element or ion
-    - +database write (ion name) (ion formula) (charge)
-
++database (Element / Ion) (symbol): Get data of element or ion
+    +database add (ion name) (ion formula) (charge)
+    +database delete (ion name / *)
 +balance (equation): Balances equations
-
-+calculate: Chemistry calculator
-    - +calculate stoichiometry
-    - +calculate gas
-    - +calculate moles
++convert (value) (conversion):  
+    +convert help: supported conversion list
++calculate:
+    +calculate stoichiometry
+    +calculate gas
+    +calculate moles
++soluble (formula)
 ```
                             ''',
                     inline=False)
@@ -82,47 +83,92 @@ async def say(ctx):
 
 
 @Bot.command(pass_context = True , aliases=['data', 'database', 'd'])  # reading, writing, deleting from database
-async def output_database(ctx, subcmd='None', *arg):  # takes context, subcommand, and all following arguments (tuple)
+async def output_database(ctx, subcmd='None', arg1='None', arg2='None', arg3='None'):  # takes context, subcommand, and 3 arguements
     # variables are given default values of 'None' so that error messages can be displayed
+
     if subcmd.lower().startswith("e"):  # search periodic table for element
-        arg = arg[0]  # take first argument after the subcommand
-        arg = arg[:2].capitalize()
-        embed = read_element(arg)  # technically running sync code is bad practice, but it is highly unlikely for this function to take very long or crash
+        arg1 = arg1[:2].capitalize()
+        embed = read_element(arg1)
         if embed is None:  # if read_element returns empty
             await ctx.send("```Could not find element data.```")
         else:
             await ctx.send(embed=embed)
     elif subcmd.lower().startswith('i'):  # search for ion
-        embed = read_ion(arg[0])
+        embed = read_ion(arg1)
         if embed is None:  # if read_element returns empty
-            await ctx.send("```Could not find ion in database; Ion names are case-sensitive. (Add new ion with +data write)```")
+            await ctx.send("```Could not find ion in database. (Ion names are case-sensitive.)```")
         else:
             await ctx.send(embed=embed)
-    elif subcmd.lower().startswith('w'):
+
+    elif subcmd.lower().startswith('a'):  # adding ion
         try:
-            success = add_ion(arg[0], arg[1], arg[2])  # outcome of write command
+            success = add_ion(arg1, arg2, arg3)  # outcome of write command
             if success == 'Success':
-                await ctx.send(f"```Successfully added {arg[0]} to database```")
+                await ctx.send(f"```Successfully added {arg1} to database```")
             elif success == 'Duplicate':
-                await ctx.send("```Entry already exists within database```")
-                embed = read_ion(arg[1])
+                embed = read_ion(arg2)
+                await ctx.send("```Entry already exists within database, or formula has incorrect capitalization```",)
                 await ctx.send(embed=embed)  # output ion data that is duplicated
             else:
-                await ctx.send(f"```Invalid formula: '{arg[1]}'```")
+                await ctx.send(f"```Invalid formula: '{arg2}'```")
         except IndexError:
             await ctx.send('''```
-Invalid command format, +data write (name) (formula) (ionic charge)
+Invalid command format: use +data write (name) (formula) (ionic charge)
 Example: +data write Acetate CH3COO 1-```''')
+
+    elif subcmd.lower().startswith('d'):  # deleting ion
+        try:
+            name = arg1
+            delete_ion(name)  # delete any ions matching the first given argument
+            if arg1 != '*':
+                await ctx.send(f"```Successfully deleted {arg1} from database```")
+            else:
+                await ctx.send(f"```Successfully refreshed database```")
+        except IndexError:
+            await ctx.send('```Invalid command format: use +data delete (formula)```')
     else:
         await ctx.send("```Invalid command format, type '+commands' for list of commands```")
 
 
-# subroutines
-# technically it would be better to use async coroutines here too,
-# but none of the functions take very long to execute for there to be a noticeable slowdown, (i think?)
-# not sure if SQLite functions support await
+@Bot.command(pass_context = True , aliases=["mole", "molar_mass", "m"])
+async def calculate_mm(ctx, arg):
+    formula, result = molar_mass(arg)
+    if not formula:  # could not read formula
+        await ctx.send(f"```Invalid formula given: {arg} (Formulas are case-sensitive)```")
+    else:
+        formula = convert_subscript(formula)
+        await ctx.send(f"```Molar mass of {formula}: {result} g/mol```")
 
-# processing
+
+@Bot.command(pass_context = True , aliases=["convert", 'c', 'con'])
+async def convert_unit(ctx, value=None, conversion=None):
+    if value.lower().startswith("help"):  # list of conversions
+        await ctx.send(''''```
+Supported Conversions:
+> 'c-k'
+> 'k-c'
+> 'kpa-atm'
+> 'atm-kpa'```''')
+        return
+    try:
+        value = float(value)
+    except ValueError:
+        await ctx.send("```Conversion value must be a number.```")
+    if conversion.lower() == 'c-k':  # C>K
+        await ctx.send(f"```{value}°C = {round(value + 273.15, 4)}K```")
+    elif conversion.lower() == 'k-c':  # K>C
+        await ctx.send(f"```{value}K = {round(value - 273.15, 4)}°C```")
+    elif conversion.lower() == 'kpa-atm':
+        await ctx.send(f"```{value}KPa = {round(value / 101.325, 4)}Atm```")
+    elif conversion.lower() == 'atm-kpa':
+        await ctx.send(f"```{value}Atm = {round(value * 101.325, 4)}Kpa```")
+    else:
+        await ctx.send(f"```Could not find requested conversion```")
+
+
+
+# subroutines
+# processing (input and outputs are async commands listen earlier)
 
 # adding and deleting from ion database
 
@@ -140,11 +186,23 @@ def add_ion(name, formula, charge):
         return 'Duplicate'
 
 
+def delete_ion(formula):
+    global CURSOR, CONNECTION
+    if formula == '*':
+        CURSOR.execute('DROP TABLE ions;')
+        load_ions(POLYATOMIC_IONS)
+    else:
+        CURSOR.execute('DELETE FROM ions WHERE formula = ?;', [formula])
+        CONNECTION.commit()
+
+
 def convert_subscript(text):   # subscript for formula numbers
-    for i in range(len(text)):
-        if text[i].isnumeric():
-            text = text.replace(text[i], Subscript[text[i]])
-    return text
+    new_text = []
+    for i in text:
+        if i.isnumeric():
+            i = Subscript[i]
+        new_text.append(i)
+    return ''.join(new_text)
 
 
 def load_elements(table):
@@ -242,8 +300,7 @@ def molar_mass(formula):
                 return False, False  # return that the formula is invalid
             mass = mass[0]
             if mass.startswith('('):  # if mass is in brackets
-                mass.pop(0)
-                mass.pop(-1)
+                mass = mass[1:-1]
             total = total + (float(mass) * int(coeff))
     return ''.join(parsed_formula), round(total, 2)  # does not use significant digits (not enough time to implement)
 
@@ -301,7 +358,7 @@ def read_ion(search):  # similar code to read_element
 
 if __name__ == "__main__":
     load_dotenv()
-    TOKEN = os.getenv('DISCORD_TOKEN')  # replace with bot token later, token is currently stored in .env
+    TOKEN = os.getenv('token')  # replace with bot token later, token is currently stored in .env
 
     if not (pathlib.Path.cwd() / DATABASE).exists(): # create tables
         CONNECTION = sqlite3.Connection(DATABASE)
@@ -313,4 +370,4 @@ if __name__ == "__main__":
         CONNECTION = sqlite3.Connection(DATABASE)
         CURSOR = CONNECTION.cursor()
 
-    Bot.run(TOKEN)
+    Bot.run(TOKEN)  # start main loop
