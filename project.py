@@ -36,10 +36,13 @@ async def on_disconnect():
 
 # inputs/outputs
 
-@Bot.command(name='help')  # custom help command
+
+@Bot.command(name='help', aliases=['h', 'commands'])  # custom help command
 async def help_message(ctx):
     embed = discord.Embed(title="Untitled Discord Bot",
-                          description="A bot that doesn't really do anything (yet) besides take up processor power.",
+                          description='''A bot that doesn't really do anything (yet) besides take up processor power. 
+Data was taken from Alberta Chemistry 30 Data Booklet. 
+(https://www.alberta.ca/assets/documents/edc-chemistry30-data-booklet.pdf)''',
                           color=5935975)
     embed.add_field(name="Basic Commands",
                     value='''
@@ -52,24 +55,22 @@ async def help_message(ctx):
                     inline=False)
     embed.add_field(name="Actual Commands (WIP)",
                     value='''
+                    
 ```
-+database (Element / Ion) (symbol): Get data of element or ion
-    +database add (ion name) (ion formula) (charge)
-    +database delete (ion name / *)
-+balance (equation): Balances equations
-+convert (value) (conversion):  
-    +convert help: supported conversion list
-+calculate:
-    +calculate stoichiometry
++database (Element / Ion) (symbol): Get element/ion data
+    +database add (ion name) (ion formula) [charge]
+    +database delete (ion name)```
+```+balance (equation): Balances equations```
+```+convert (value) (conversion):
+    +convert help: supported conversion list```
+```+calculate:
+    +calculate stoichiometry [help]
     +calculate gas
-    +calculate moles
-+soluble (formula)
-```
+    +calculate moles```
+```+soluble (formula)```
                             ''',
                     inline=False)
     await ctx.send(embed=embed)
-
-# commands (input/output)
 
 
 @Bot.command(name='hello')  # say hello back
@@ -82,8 +83,8 @@ async def say(ctx):
     await ctx.send(ctx.message.content[4:])
 
 
-@Bot.command(pass_context = True , aliases=['data', 'database', 'd'])  # reading, writing, deleting from database
-async def output_database(ctx, subcmd='None', arg1='None', arg2='None', arg3='None'):  # takes context, subcommand, and 3 arguements
+@Bot.command(name='database', aliases=['data', 'dat', 'd'])  # reading, writing, deleting from database
+async def output_database(ctx, subcmd=None, arg1=None, arg2=None, arg3=None):  # takes context, subcommand, and 3 arguements
     # variables are given default values of 'None' so that error messages can be displayed
 
     if subcmd.lower().startswith("e"):  # search periodic table for element
@@ -100,39 +101,37 @@ async def output_database(ctx, subcmd='None', arg1='None', arg2='None', arg3='No
         else:
             await ctx.send(embed=embed)
 
-    elif subcmd.lower().startswith('a'):  # adding ion
-        try:
+    elif subcmd.lower().startswith('a') or subcmd.lower().startswith('w') :  # adding ion (writing ion)
+        try:  # in case of index error
             success = add_ion(arg1, arg2, arg3)  # outcome of write command
             if success == 'Success':
                 await ctx.send(f"```Successfully added {arg1} to database```")
             elif success == 'Duplicate':
                 embed = read_ion(arg2)
-                await ctx.send("```Entry already exists within database, or formula has incorrect capitalization```",)
+                await ctx.send("```Entry already exists within database; delete the entry first to modify it. | +data delete (formula)```",)
                 await ctx.send(embed=embed)  # output ion data that is duplicated
             else:
-                await ctx.send(f"```Invalid formula: '{arg2}'```")
-        except IndexError:
+                await ctx.send(f"```Invalid given formula: '{arg2}'```")
+        except TypeError:
             await ctx.send('''```
 Invalid command format: use +data write (name) (formula) (ionic charge)
-Example: +data write Acetate CH3COO 1-```''')
+Example: +data add Acetate CH3COO 1-```''')
 
     elif subcmd.lower().startswith('d'):  # deleting ion
-        try:
-            name = arg1
-            delete_ion(name)  # delete any ions matching the first given argument
-            if arg1 != '*':
-                await ctx.send(f"```Successfully deleted {arg1} from database```")
-            else:
-                await ctx.send(f"```Successfully refreshed database```")
-        except IndexError:
-            await ctx.send('```Invalid command format: use +data delete (formula)```')
+        name = arg1
+        delete_ion(name)  # delete any ions matching the first given argument
+        if arg1 != '*':
+            await ctx.send(f"```Successfully deleted {arg1} from database```")
+        else:
+            await ctx.send(f"```Successfully reloaded database```")
     else:
-        await ctx.send("```Invalid command format, type '+commands' for list of commands```")
+        await ctx.send("```Invalid command format | +commands for list of commands```")
 
 
-@Bot.command(pass_context = True , aliases=["mole", "molar_mass", "m"])
+@Bot.command(name='molar_mass', aliases=["mole", "m", "molarmass"])
 async def calculate_mm(ctx, arg):
     formula, result = molar_mass(arg)
+    formula = ''.join(formula)
     if not formula:  # could not read formula
         await ctx.send(f"```Invalid formula given: {arg} (Formulas are case-sensitive)```")
     else:
@@ -140,31 +139,46 @@ async def calculate_mm(ctx, arg):
         await ctx.send(f"```Molar mass of {formula}: {result} g/mol```")
 
 
-@Bot.command(pass_context = True , aliases=["convert", 'c', 'con'])
-async def convert_unit(ctx, value=None, conversion=None):
+@Bot.command(name='conversion', aliases=["convert", 'c', 'con'])
+async def convert_unit(ctx, value='None', conversion='None'):  # parameter conversions must always be strings
     if value.lower().startswith("help"):  # list of conversions
-        await ctx.send(''''```
+        await ctx.send('''```
+Command Format:
++conversion (value) (conversion)```
+```
 Supported Conversions:
 > 'c-k'
 > 'k-c'
 > 'kpa-atm'
-> 'atm-kpa'```''')
+> 'atm-kpa
+> 'kpa-mmhg'
+> 'mmhg-kpa'
+> 'mmhg-atm'
+> 'atm-mmhg'```''')
         return
     try:
         value = float(value)
     except ValueError:
-        await ctx.send("```Conversion value must be a number.```")
+        await ctx.send("```Conversion value must be a number. | +convert help```")
+        return
     if conversion.lower() == 'c-k':  # C>K
         await ctx.send(f"```{value}°C = {round(value + 273.15, 4)}K```")
     elif conversion.lower() == 'k-c':  # K>C
         await ctx.send(f"```{value}K = {round(value - 273.15, 4)}°C```")
     elif conversion.lower() == 'kpa-atm':
-        await ctx.send(f"```{value}KPa = {round(value / 101.325, 4)}Atm```")
+        await ctx.send(f"```{value}kPa = {round(value / 101.325, 6)}Atm```")
     elif conversion.lower() == 'atm-kpa':
-        await ctx.send(f"```{value}Atm = {round(value * 101.325, 4)}Kpa```")
+        await ctx.send(f"```{value}Atm = {round(value * 101.325, 6)}kPa```")
+    elif conversion.lower() == 'kpa-mmhg':
+        await ctx.send(f"```{value}kPa = {round(value * 7.50062, 6)}mmHg```")
+    elif conversion.lower() == 'mmhg-kpa':
+        await ctx.send(f"```{value}mmHg = {round(value / 7.50062, 6)}kPa```")
+    elif conversion.lower() == 'mmhg-atm':
+        await ctx.send(f"```{value}mmHg = {round(value / 760, 6)}Atm```")
+    elif conversion.lower() == 'atm-mmhg':
+        await ctx.send(f"```{value}Atm = {round(value * 760, 6)}mmHg```")
     else:
-        await ctx.send(f"```Could not find requested conversion```")
-
+        await ctx.send(f"```Could not find requested conversion | +convert help to show list of conversions```")
 
 
 # subroutines
@@ -188,7 +202,10 @@ def add_ion(name, formula, charge):
 
 def delete_ion(formula):
     global CURSOR, CONNECTION
-    if formula == '*':
+    if formula == '*':  # not user function, just so I can reset database in case of mistakes
+        print("Deleting and reloading databases")
+        CURSOR.execute('DROP TABLE elements;')
+        load_elements(PERIODIC_TABLE)
         CURSOR.execute('DROP TABLE ions;')
         load_ions(POLYATOMIC_IONS)
     else:
@@ -232,7 +249,8 @@ def load_ions(table):  # almost the same code as above
     for i in range(len(content)):
         content[i] = content[i].split(',')
         content[i][-1] = content[i][-1][:-1]
-        content[i][1], content[i][3] = molar_mass(content[i][1])
+        formula, content[i][3] = molar_mass(content[i][1])
+        content[i][1] = ''.join(formula)
     print("Initializing ion database")
     CURSOR.execute("CREATE TABLE ions(name TEXT NOT NULL, formula PRIMARY KEY, charge INTEGER NOT NULL, molar_mass TEXT NOT NULL);")
 
@@ -247,7 +265,7 @@ def molar_mass(formula):
     '''
     takes a molecule and returns its molar mass and list of elements/coefficients
     :param formula: (str) Formula i.e. C6H5COO, C6H12O6
-    :return: (str) Parsed formula, (float) molar mass
+    :return: (list) Parsed formula, (float) molar mass
     '''
     global CURSOR
     parsed_formula = []
@@ -302,7 +320,7 @@ def molar_mass(formula):
             if mass.startswith('('):  # if mass is in brackets
                 mass = mass[1:-1]
             total = total + (float(mass) * int(coeff))
-    return ''.join(parsed_formula), round(total, 2)  # does not use significant digits (not enough time to implement)
+    return parsed_formula, round(total, 2)  # does not use significant digits (not enough time to implement)
 
 
 def read_element(search):
@@ -358,7 +376,7 @@ def read_ion(search):  # similar code to read_element
 
 if __name__ == "__main__":
     load_dotenv()
-    TOKEN = os.getenv('token')  # replace with bot token later, token is currently stored in .env
+    TOKEN = os.getenv('token')  # replace with: TOKEN = '{BOT_TOKEN}'
 
     if not (pathlib.Path.cwd() / DATABASE).exists(): # create tables
         CONNECTION = sqlite3.Connection(DATABASE)
