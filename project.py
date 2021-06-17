@@ -4,8 +4,7 @@ author: Daniel Zhang
 data-created: 2021-06-11
 '''
 # embed colors: https://coolors.co/3f4b3b-44633f-5a9367-5cab7d-4adbc8
-import os
-import pathlib
+import os, math, pathlib
 import sqlite3
 
 import discord
@@ -62,20 +61,20 @@ Data was taken from Alberta Chemistry 30 Data Booklet.
     +database delete (ion name)```
 ```+balance (equation): Balances equations```
 ```+convert (value) (conversion):
-    +convert help: supported conversion list```
+    +convert help: shows supported conversion list```
 ```+calculate:
     +calculate stoichiometry [help]
-    +calculate gas
+    +calculate gas [help]
     +calculate moles```
-```+soluble (formula)```
-                            ''',
+```+solubility (positive ion) (negative ion)```''',
                     inline=False)
     await ctx.send(embed=embed)
 
 
 @Bot.command(name='hello')  # say hello back
 async def hello(ctx):
-    await ctx.send(f"Hello! {ctx.author.mention}")
+    message = await ctx.send(f"Hello! {ctx.author.mention}")
+    await message.add_reaction('\N{THUMBS UP SIGN}')
 
 
 @Bot.command(name='say')  # repeat all arguments given after command
@@ -84,7 +83,7 @@ async def say(ctx):
 
 
 @Bot.command(name='database', aliases=['data', 'dat', 'd'])  # reading, writing, deleting from database
-async def output_database(ctx, subcmd=None, arg1=None, arg2=None, arg3=None):  # takes context, subcommand, and 3 arguements
+async def output_database(ctx, subcmd='', arg1=None, arg2=None, arg3=None):  # takes context, subcommand, and 3 arguements
     # variables are given default values of 'None' so that error messages can be displayed
 
     if subcmd.lower().startswith("e"):  # search periodic table for element
@@ -125,7 +124,7 @@ Example: +data add Acetate CH3COO 1-```''')
         else:
             await ctx.send(f"```Successfully reloaded database```")
     else:
-        await ctx.send("```Invalid command format | +commands for list of commands```")
+        await ctx.send("```Invalid command format | +help for list of commands```")
 
 
 @Bot.command(name='molar_mass', aliases=["mole", "m", "molarmass"])
@@ -139,8 +138,8 @@ async def calculate_mm(ctx, arg):
         await ctx.send(f"```Molar mass of {formula}: {result} g/mol```")
 
 
-@Bot.command(name='conversion', aliases=["convert", 'c', 'con'])
-async def convert_unit(ctx, value='None', conversion='None'):  # parameter conversions must always be strings
+@Bot.command(name='conversion', aliases=["convert", 'con'])
+async def convert_unit(ctx, value='', conversion=''):  # parameters must always be strings
     if value.lower().startswith("help"):  # list of conversions
         await ctx.send('''```
 Command Format:
@@ -181,16 +180,125 @@ Supported Conversions:
         await ctx.send(f"```Could not find requested conversion | +convert help to show list of conversions```")
 
 
+@Bot.command(name='solubility', aliases=["soluble", 'sol', 's'])
+async def soluble(ctx, pos_ion, neg_ion):
+    result = test_soluble(pos_ion, neg_ion)
+    formula = balance_ionic(pos_ion, neg_ion)
+    if formula is not False:
+        if result:
+            await ctx.send(f"```The ions {pos_ion} and {neg_ion} will form {formula}, which is soluble in water```")
+        else:
+            await ctx.send(f"```The ions {pos_ion} and {neg_ion} will form {formula}, which is not soluble in water```")
+    else:
+        if result:
+            await ctx.send(f"```{pos_ion} and {neg_ion} will form a water soluble compound, but one or more ionic charges were not found in database.```")
+        else:
+            await ctx.send(f"```{pos_ion} and {neg_ion} will not form a water soluble compound, but one or more ionic charges were not found in database.```")
+
+
+@Bot.command(name='calculate', aliases=["cal", 'calc'])
+async def calculate(ctx, subcmd, *args):  # *args returns a tuple of all arguments in command message after the first 2
+    pass
+
+
 # subroutines
 # processing (input and outputs are async commands listen earlier)
 
-# adding and deleting from ion database
+def gcd(a, b):  # euclidean algorithm
+    if a == 0:
+        return b
+    return gcd(b % a, a)
 
+
+def balance_ionic(pos_ion, neg_ion):
+    global CURSOR
+
+    # get charge from database
+    charge1 = CURSOR.execute("SELECT charge FROM elements WHERE symbol = ?", [pos_ion]).fetchone()
+    if charge1 is None:
+        charge1 = CURSOR.execute("SELECT charge FROM ions WHERE formula = ?", [pos_ion]).fetchone()
+
+    charge2 = CURSOR.execute("SELECT charge FROM elements WHERE symbol = ?", [neg_ion]).fetchone()
+    if charge2 is None:
+        charge2 = CURSOR.execute("SELECT charge FROM ions WHERE formula = ?", [neg_ion]).fetchone()
+    if charge1 is not None and charge2 is not None:
+        charge2 = charge2[0][0]  # take most common ionic charge
+        charge1 = charge1[0][0]
+        if charge1.isnumeric() and charge2.isnumeric():
+            charge1 = int(charge1)
+            charge2 = int(charge2)
+            divisor = gcd(charge1, charge2)
+            charge1 = charge1 // divisor
+            charge2 = charge2 // divisor
+
+            coeff1 = charge2
+            coeff2 = charge1
+            # if charge1 % charge2 == 0:
+            #     coeff2 = charge1 // charge2
+            #     coeff1 = 1
+            # elif charge2 % charge1 == 0:
+            #     coeff1 = charge2 // charge1
+            #     coeff2 = 1
+
+            if not coeff1 == 1:
+                for i in pos_ion:
+                    if i.isnumeric():
+                        pos_ion = f"({pos_ion})"
+                        break
+            else:
+                coeff1 = ''
+            if not coeff2 == 1:
+                for i in neg_ion:
+                    if i.isnumeric():
+                        neg_ion = f"({neg_ion})"
+                        break
+            else:
+                coeff2 = ''
+            formula = f"{pos_ion}{coeff1}{neg_ion}{coeff2}"
+            return convert_subscript(formula)
+        else:
+            return False
+    else:
+        return False
+
+
+def test_soluble(pos_ion, neg_ion):
+    # uses same logic as precipitate calculator, but without storing anything in memory for the rest of the program
+    # exceptions
+    if (pos_ion, neg_ion) in (("Co", "IO3"), ("Fe", "OOCCOO")):
+        return True
+    elif (pos_ion, neg_ion) in (("Rb", "ClO4"), ("Cs", "ClO4"), ("Ag", "CH3COO"), ("Hg2", "CH3COO")):
+        return False
+
+    elif neg_ion == "F":  # row 2 of solubility table
+        if pos_ion in ("Li", "Mg", "Ca", "Sr", "Ba", "Fe", "Hg2", "Pb"):
+            return False
+        else:
+            return True
+    elif neg_ion in ("Cl", "Br", "I"):  # row 3
+        if pos_ion in ("Cu", "Ag", "Hg2", "Pb", "Tl"):
+            return False
+        else:
+            return True
+    elif neg_ion == "SO4":  # row 4
+        if pos_ion in ("Ca", "Sr", "Ba", "Ag", "Hg2", "Pb", "Ra"):
+            return False
+        else:
+            return True
+    elif pos_ion in ("Li", "Na", "K", "Rb", "Cs", "Fr", "NH4") or neg_ion in ("ClO3", "ClO4", "NO3", "CH3COO"):
+        # row 1 of table (has to come after row 2 due to LiF being exception to the rule)
+        return True
+    else:  # row 5-7 (every other possible case where the compound is soluble has been covered)
+        return False
+
+
+# add and delete from database
 def add_ion(name, formula, charge):
     name = name.capitalize()
     formula, mass = molar_mass(formula)
     if not formula:  # if molar_mass returned False (formula invalid)
         return False
+    formula = ''.join(formula)
     global CURSOR, CONNECTION
     try:
         CURSOR.execute('INSERT INTO ions VALUES(?, ?, ?, ?) ;', [name, formula, charge, mass])
@@ -252,7 +360,9 @@ def load_ions(table):  # almost the same code as above
         formula, content[i][3] = molar_mass(content[i][1])
         content[i][1] = ''.join(formula)
     print("Initializing ion database")
-    CURSOR.execute("CREATE TABLE ions(name TEXT NOT NULL, formula PRIMARY KEY, charge INTEGER NOT NULL, molar_mass TEXT NOT NULL);")
+    CURSOR.execute('''
+        CREATE TABLE 
+            ions(name TEXT NOT NULL, formula PRIMARY KEY, charge INTEGER NOT NULL, molar_mass TEXT NOT NULL);''')
 
     # filling table
     for i in range(len(content)):
@@ -387,5 +497,4 @@ if __name__ == "__main__":
     else:
         CONNECTION = sqlite3.Connection(DATABASE)
         CURSOR = CONNECTION.cursor()
-
     Bot.run(TOKEN)  # start main loop
