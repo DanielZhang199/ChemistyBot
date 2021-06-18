@@ -7,11 +7,18 @@ data-created: 2021-06-11
 import os
 import pathlib
 import sqlite3
+import re
 
-import discord
-# py -m pip install -U python-dotenv (not required) | py -m pip install -U discord.py
-from dotenv import load_dotenv  # for keeping the bot token secure (just add a token in code for handing in)
+import discord  # required dependency
 from discord.ext import commands
+# py -m pip install python-dotenv (not required) | py -m pip install discord.py
+from dotenv import load_dotenv  # for keeping the bot token secure (just add a token in code for handing in)
+
+try:
+    from sympy import Matrix, lcm  # py -m pip install sympy
+except ModuleNotFoundError:
+    print("Dependencies required to preform equation balancing were not found, stoichometric functions will be unavailable")
+
 
 Bot = commands.Bot(command_prefix='+', help_command=None)
 DATABASE = 'project.db'
@@ -19,7 +26,10 @@ PERIODIC_TABLE = 'periodic_table.csv'  # as taken from Alberta Education chemist
 POLYATOMIC_IONS = 'polyatomic_ions.csv'
 Subscript = {"1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "0": "₀", }
 
-
+# Lists used as global variables for balancing
+ElementMatrix = []
+ElementList = []
+Equation = None
 # coroutines (events)
 
 @Bot.event
@@ -39,8 +49,8 @@ async def on_disconnect():
 
 @Bot.command(name='help', aliases=['h', 'commands'])  # custom help command
 async def help_message(ctx):
-    embed = discord.Embed(title="Untitled Discord Bot",
-                          description='''A bot that doesn't really do anything (yet) besides take up processor power. 
+    embed = discord.Embed(title="Chem-Bot",
+                          description='''Bot that helps with chemistry and whilst taking up my processor power and RAM. 
 Data was taken from Alberta Chemistry 30 Data Booklet. 
 (https://www.alberta.ca/assets/documents/edc-chemistry30-data-booklet.pdf)''',
                           color=5935975)
@@ -64,9 +74,9 @@ Data was taken from Alberta Chemistry 30 Data Booklet.
 ```+calculate [help]: see detail
     +calculate stoichiometry  (WIP)
     +calculate gas 
-    +calculate moles 
+    +calculate moles ```
 ```+solubility (positive ion) (negative ion)```
-```+formulas: In case you are too lazy to get a formula sheet (WIP)''',
+```+formulas: In case you are too lazy to find a formula sheet (WIP)```''',
                     inline=False)
     await ctx.send(embed=embed)
 
@@ -229,6 +239,7 @@ formula: Ionic compound formula (case-sensitive)```''',
             t = args[3]
         except IndexError:
             await ctx.send("```Incorrect number of parameters given | +calculate help```")
+            return
         r = 8.314
         try:  # lots of error checking to figure out what the user inputted
             p = float(p)
@@ -280,10 +291,96 @@ formula: Ionic compound formula (case-sensitive)```''',
             formula = convert_subscript(formula)
             await ctx.send(f"```Molar mass of {formula}: {result} g/mol```")
 
+    elif subcmd.lower().startswith('s'):
+        # solution based from https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b
+        pass
     else:
         await ctx.send("```Invalid command format | +calculate help```")
+
+
+@Bot.command(name='balance', aliases=["b", 'bal'])
+async def balance(ctx, arg):
+    global Equation  # so that stoichiometric calculations can used balanced equation
+    # based on tutorial from https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b, Balancing Chemical Equations With Python, Mohammad-Ali Bandzar
+    # since i don't know linear algebra
+    equation = arg.split('=')
+    reactants = equation[0].split('+')
+    products = equation[1].split('+')
+
+    for i in range(len(reactants)):  # puts terms into matrix
+        read_compound(reactants[i], i, 1)
+    for i in range(len(products)):
+        read_compound(products[i], i + len(reactants), -1)
+
+    element_matrix = Matrix(ElementMatrix)
+    element_matrix = element_matrix.transpose()
+    solution = element_matrix.nullspace()[0]
+    multiple = lcm([val.q for val in solution])
+    solution = multiple * solution
+    coeff = solution.tolist()
+    output = []
+    for i in range(len(reactants)):
+        if coeff[i][0] != 1:
+            output.append(str(coeff[i][0]))
+        else:
+            output.append('')
+        output.append(convert_subscript(reactants[i]))
+        if i < len(reactants) - 1:
+            output.append(" + ")
+    output.append(" -> ")
+
+    for i in range(len(products)):
+        if coeff[i + len(reactants)][0] != 1:
+            output.append(str(coeff[i + len(reactants)][0]))
+        else:
+            output.append('')
+        output.append(convert_subscript(products[i]))
+        if i < len(products) - 1:
+            output.append(" + ")
+    Equation = output
+    await ctx.send(f"```Balanced equation: {''.join(output)} added to memory```")
+
+
 # subroutines
 # processing (input and outputs are async commands listen earlier)
+
+
+def read_compound(compound, index, side):
+    # need regex to avoid typing a lot of extra lines
+    segments = re.split('(\([A-Za-z0-9]*\)[0-9])', compound)  # find anything surrounded by parenthesis
+    for segment in segments:
+        if segment.startswith("("):
+            segment = re.split('\)([0-9]*)', segment)  # find a ')' followed by (a) digit(s)
+            multiplier = int(segment[1])
+            segment = segment[0][1:]
+        else:
+            multiplier = 1
+
+        element_and_numbers = re.split('([A-Z][a-z]?)', segment)  # find a element (capital followed by optional lower-case)
+        i = 0
+        while i < len(element_and_numbers) - 1:
+            i += 1
+            if len(element_and_numbers[i]) > 0:
+                if element_and_numbers[i + 1].isdigit():
+                    count = int(element_and_numbers[i + 1]) * multiplier
+                    add_matrix(element_and_numbers[i], index, count, side)
+                    i += 1
+                else:
+                    add_matrix(element_and_numbers[i], index, multiplier, side)
+
+
+def add_matrix(element, index, count, side):
+    if index == len(ElementMatrix):
+        ElementMatrix.append([])
+        for i in ElementList:
+            ElementMatrix[index].append(0)
+    if element not in ElementList:
+        ElementList.append(element)
+        for i in range(len(ElementMatrix)):
+            ElementMatrix[i].append(0)
+    column = ElementList.index(element)
+    ElementMatrix[index][column] += count * side
+
 
 def gcd(a, b):  # euclidean algorithm
     if a == 0:
@@ -314,12 +411,6 @@ def balance_ionic(pos_ion, neg_ion):
 
             coeff1 = charge2
             coeff2 = charge1
-            # if charge1 % charge2 == 0:
-            #     coeff2 = charge1 // charge2
-            #     coeff1 = 1
-            # elif charge2 % charge1 == 0:
-            #     coeff1 = charge2 // charge1
-            #     coeff2 = 1
 
             if not coeff1 == 1:
                 for i in pos_ion:
@@ -414,6 +505,7 @@ def convert_subscript(text):   # subscript for formula numbers
 def load_elements(table):
     file = open(table)
     content = file.readlines()
+    file.close()
     content.pop(0)  # delete table header
     for i in range(len(content)):
         content[i] = content[i].split(',')
