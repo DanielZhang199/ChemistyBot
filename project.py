@@ -3,8 +3,9 @@ title: Discord bot
 author: Daniel Zhang
 data-created: 2021-06-11
 '''
-# embed colors: https://coolors.co/3f4b3b-44633f-5a9367-5cab7d-4adbc8
-import os, math, pathlib
+# last embed colour: 4905928
+import os
+import pathlib
 import sqlite3
 
 import discord
@@ -53,20 +54,19 @@ Data was taken from Alberta Chemistry 30 Data Booklet.
                         ''',
                     inline=False)
     embed.add_field(name="Actual Commands (WIP)",
-                    value='''
-                    
-```
+                    value='''```
 +database (Element / Ion) (symbol): Get element/ion data
     +database add (ion name) (ion formula) [charge]
     +database delete (ion name)```
 ```+balance (equation): Balances equations```
 ```+convert (value) (conversion):
     +convert help: shows supported conversion list```
-```+calculate:
-    +calculate stoichiometry [help]
-    +calculate gas [help]
-    +calculate moles```
-```+solubility (positive ion) (negative ion)```''',
+```+calculate [help]: see detail
+    +calculate stoichiometry  (WIP)
+    +calculate gas 
+    +calculate moles 
+```+solubility (positive ion) (negative ion)```
+```+formulas: In case you are too lazy to get a formula sheet (WIP)''',
                     inline=False)
     await ctx.send(embed=embed)
 
@@ -107,7 +107,7 @@ async def output_database(ctx, subcmd='', arg1=None, arg2=None, arg3=None):  # t
                 await ctx.send(f"```Successfully added {arg1} to database```")
             elif success == 'Duplicate':
                 embed = read_ion(arg2)
-                await ctx.send("```Entry already exists within database; delete the entry first to modify it. | +data delete (formula)```",)
+                await ctx.send("```Entry already exists within database; delete the entry first to modify it. | +data delete (formula)```")
                 await ctx.send(embed=embed)  # output ion data that is duplicated
             else:
                 await ctx.send(f"```Invalid given formula: '{arg2}'```")
@@ -197,10 +197,91 @@ async def soluble(ctx, pos_ion, neg_ion):
 
 
 @Bot.command(name='calculate', aliases=["cal", 'calc'])
-async def calculate(ctx, subcmd, *args):  # *args returns a tuple of all arguments in command message after the first 2
-    pass
+async def calculate(ctx, subcmd='', *args):  # *args returns a tuple of all arguments in command message after the first 2
+    if subcmd.lower().startswith('h'):  # help command
+        embed = discord.Embed(title="Calculations", color=6073213)
+        embed.add_field(name="Gas Law | +calculate gas (p) (v) (n) (t)",
+                        value='''```
+p: pressure in kPa
+v: volume of gas in L
+n: moles of gas
+t: temperature in K
+Replace a parameter with a word (i.e 'find') to calculate for value. (Any other non numeric value will also work)
+Example: +calculate gas 120 2.0 1.0 find```''',
+                        inline=False)
 
+        embed.add_field(name="Stoichiometry",
+                        value='''```
+WIP```''',
+                        inline=False)
+        embed.add_field(name="Molar Mass | +calculate mole (formula)",
+                        value='''```
+formula: Ionic compound formula (case-sensitive)```''',
+                        inline=False)
+        await ctx.send(embed=embed)
 
+    elif subcmd.lower().startswith('g'):  # gas calculation
+        # PV = nRT (takes 4 arguments)
+        try:
+            p = args[0]
+            v = args[1]
+            n = args[2]
+            t = args[3]
+        except IndexError:
+            await ctx.send("```Incorrect number of parameters given | +calculate help```")
+        r = 8.314
+        try:  # lots of error checking to figure out what the user inputted
+            p = float(p)
+            try:
+                v = float(v)
+                try:
+                    n = float(n)
+                    try:
+                        t = float(t)
+                        await ctx.send("```Can't calculate if all the values are already provided```")
+                    except ValueError:  # need to calculate for temp
+                        t = (p*v)/(r*n)
+                        await ctx.send(f"```Temperature: {round(t, 3)}K```")
+                except ValueError:  # calculate n
+                    try:
+                        t = float(t)
+                        n = (p*v)/(r*t)
+                        await ctx.send(f"```Moles: {round(n, 3)} mol```")
+                    except ValueError:
+                        await ctx.send("```Invalid command format | +calculate help```")
+            except ValueError:
+                try:
+                    n = float(n)
+                    t = float(t)
+                    v = (n*r*t)/p
+                    await ctx.send(f"```Volume: {round(v, 3)}L```")
+                except ValueError:
+                    await ctx.send("```Invalid command format | +calculate help```")
+        except ValueError:
+            try:
+                v = float(v)
+                n = float(n)
+                t = float(t)
+                p = (n*r*t)/v
+                await ctx.send(f"```Pressure: {round(p, 3)}kPa```")
+            except ValueError:
+                await ctx.send("```Invalid command format | +calculate help```")
+
+    elif subcmd.lower().startswith('m'):  # molar mass calculation (takes only the first argument)
+        try:
+            formula, result = molar_mass(args[0])
+        except IndexError:
+            await ctx.send("```Invalid command format | +calculate help```")
+            return
+        formula = ''.join(formula)
+        if not formula:  # could not read formula
+            await ctx.send(f"```Invalid formula given: {args[0]} (Formulas are case-sensitive)```")
+        else:
+            formula = convert_subscript(formula)
+            await ctx.send(f"```Molar mass of {formula}: {result} g/mol```")
+
+    else:
+        await ctx.send("```Invalid command format | +calculate help```")
 # subroutines
 # processing (input and outputs are async commands listen earlier)
 
