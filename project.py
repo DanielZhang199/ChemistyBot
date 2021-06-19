@@ -27,10 +27,10 @@ POLYATOMIC_IONS = 'polyatomic_ions.csv'
 Subscript = {"1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "0": "₀", }
 
 # Lists used as global variables for balancing
-ElementMatrix = []
+CoefficientMatrix = []
 ElementList = []
-Equation = None
 # coroutines (events)
+
 
 @Bot.event
 async def on_ready():
@@ -68,7 +68,8 @@ Data was taken from Alberta Chemistry 30 Data Booklet.
 +database (Element / Ion) (symbol): Get element/ion data
     +database add (ion name) (ion formula) [charge]
     +database delete (ion name)```
-```+balance (equation): Balances equations```
+```+balance (equation): Balances equations
+        +balance help: formatting help (WIP)```
 ```+convert (value) (conversion):
     +convert help: shows supported conversion list```
 ```+calculate [help]: see detail
@@ -90,6 +91,7 @@ async def hello(ctx):
 @Bot.command(name='say')  # repeat all arguments given after command
 async def say(ctx):
     await ctx.send(ctx.message.content[4:])
+
 
 
 @Bot.command(name='database', aliases=['data', 'dat', 'd'])  # reading, writing, deleting from database
@@ -299,34 +301,61 @@ formula: Ionic compound formula (case-sensitive)```''',
 
 
 @Bot.command(name='balance', aliases=["b", 'bal'])
-async def balance(ctx, arg):
-    global Equation  # so that stoichiometric calculations can used balanced equation
-    # based on tutorial from https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b, Balancing Chemical Equations With Python, Mohammad-Ali Bandzar
-    # since i don't know linear algebra
-    equation = arg.split('=')
+async def balance_equation(ctx, *arg):
+    output = balance(''.join(arg))  # spaces don't actually change output this way
+    await ctx.send(f"```Balanced equation: {''.join(output)}```")
+
+
+# subroutines
+# processing (input and outputs are async commands listen earlier)
+def transpose(matrix):
+    # transpose 'matrix' (sympy can do this too, but I would rather stay with standard library as much as possible
+    rows = len(matrix)
+    columns = len(matrix[0])
+
+    new_matrix = []
+    for j in range(columns):
+        row = []
+        for i in range(rows):
+            row.append(matrix[i][j])
+        new_matrix.append(row)
+    return new_matrix
+
+
+def balance(equation):  # very verbose comments (since I don't fully understand it)
+
+    equation = equation.split('=')
     reactants = equation[0].split('+')
-    products = equation[1].split('+')
+    products = equation[1].split('+')  # get reactants and products in separate lists
 
     for i in range(len(reactants)):  # puts terms into matrix
-        read_compound(reactants[i], i, 1)
+        add_matrix(reactants[i], i, 1)
     for i in range(len(products)):
-        read_compound(products[i], i + len(reactants), -1)
+        add_matrix(products[i], i + len(reactants), -1)  # product quantities are negative
 
-    element_matrix = Matrix(ElementMatrix)
-    element_matrix = element_matrix.transpose()
-    solution = element_matrix.nullspace()[0]
-    multiple = lcm([val.q for val in solution])
-    solution = multiple * solution
-    coeff = solution.tolist()
+    # must use sympy (or numpy i think) to find null space
+    # I guess this function can't be marked for alberta curriculum project?
+    # (trying to reduce amount of modules used but no idea how to do this otherwise)
+    answer = Matrix(transpose(CoefficientMatrix)).nullspace()[0]  # take the first item in transposed null space matrix
+    denominators = []
+    for i in answer:
+        print(type(i))
+        denominators.append(i.q)  # add denominators of each coefficient to find lcm
+        # .q means denominator in (p/q), since values in answers are actually sympy objects
+    multiple = lcm(denominators)
+    answer = answer * multiple   # multiply matrix by lcm
+    coeff = answer.tolist()  # turns matrix to array
+
     output = []
     for i in range(len(reactants)):
         if coeff[i][0] != 1:
-            output.append(str(coeff[i][0]))
+            output.append(str(coeff[i][0]))  # add number if coefficient is not 1
         else:
-            output.append('')
-        output.append(convert_subscript(reactants[i]))
-        if i < len(reactants) - 1:
+            output.append('')  # add blank string if coefficient is  1
+        output.append(convert_subscript(reactants[i]))  # add string of corresponding reactant
+        if i + 1 < len(reactants):  # if there are more reactants
             output.append(" + ")
+
     output.append(" -> ")
 
     for i in range(len(products)):
@@ -337,50 +366,67 @@ async def balance(ctx, arg):
         output.append(convert_subscript(products[i]))
         if i < len(products) - 1:
             output.append(" + ")
-    Equation = output
-    await ctx.send(f"```Balanced equation: {''.join(output)} added to memory```")
+
+    CoefficientMatrix.clear()
+    ElementList.clear()
+    # clear global lists so they don't hold up memory, and to allow for reuse of functions
+    return output
 
 
-# subroutines
-# processing (input and outputs are async commands listen earlier)
-
-
-def read_compound(compound, index, side):
-    # need regex to avoid typing a lot of extra lines
+def add_matrix(compound, index, side):
+    # need reg expressions to avoid typing a LOT of extra lines
     segments = re.split('(\([A-Za-z0-9]*\)[0-9])', compound)  # find anything surrounded by parenthesis
+    # therefore does not support polyatomic decomposition reactions (which are beyond scope of high school chem)
     for segment in segments:
         if segment.startswith("("):
-            segment = re.split('\)([0-9]*)', segment)  # find a ')' followed by (a) digit(s)
-            multiplier = int(segment[1])
-            segment = segment[0][1:]
+            segment = re.split('\)([0-9]*)', segment)  # find a ')' followed by a number of digits
+            multiplier = int(segment[1])  # i.e. in (NO3)2 multiplier is 2
+            segment = segment[0][1:]  # only get digits
         else:
-            multiplier = 1
+            multiplier = 1  # blank means there is only 1 of the element
 
-        element_and_numbers = re.split('([A-Z][a-z]?)', segment)  # find a element (capital followed by optional lower-case)
+        parsed_list = re.split('([A-Z][a-z]?)', segment)
+        # returns a list of of either element symbol or empty string/number in alternating order
+        # empty string means 1, and first number/empty string is the coefficient of the entire reactant
+        # CH4 becomes ['', 'C', '', 'H', '4']
+        # find a element (capital followed by optional lower-case)
+        # this means that elements don't need to be real, just a capital followed by optional lowercase letter
+
         i = 0
-        while i < len(element_and_numbers) - 1:
-            i += 1
-            if len(element_and_numbers[i]) > 0:
-                if element_and_numbers[i + 1].isdigit():
-                    count = int(element_and_numbers[i + 1]) * multiplier
-                    add_matrix(element_and_numbers[i], index, count, side)
-                    i += 1
-                else:
-                    add_matrix(element_and_numbers[i], index, multiplier, side)
+        while i < len(parsed_list) - 1:  # read the list of elements/numbers
+            i += 1  # only increase by one if value is not zero (otherwise i should increment by 2)
+            if len(parsed_list[i]) > 0:
+                # element is not blank string
+                if parsed_list[i + 1].isdigit():  # matches all coefficients which are not blank
+                    amount = int(parsed_list[i + 1]) * multiplier  # take number and multiplier (element coefficient)
+                    if index == len(CoefficientMatrix):
+                        # if matrix needs new row (add row when index number is same as length of matrix), first element of each molecule will trigger this statement
+                        # new row for each reactant / product
+                        CoefficientMatrix.append([])
+                        for iteration in ElementList:
+                            CoefficientMatrix[index].append(0)  # fill row with zeros for each element in molecule
+                    if parsed_list[i] not in ElementList:  # if the element was not already added
+                        ElementList.append(parsed_list[i])  # add element to the list of elements (elements will be in same order so they can be put together)
+                        for j in range(len(CoefficientMatrix)):
+                            CoefficientMatrix[j].append(0)  # add zero to every row in matrix for each new element
 
+                    col = ElementList.index(parsed_list[i])  # find index number of element in the element list
+                    CoefficientMatrix[index][col] = amount * side  # side is 1 for reactants is -1 for products
+                    # replaces the zero with an actual number (amount of that element)
+                    i += 1  # add extra 1 to i to get to the next number in list (skip the elements)
 
-def add_matrix(element, index, count, side):
-    if index == len(ElementMatrix):
-        ElementMatrix.append([])
-        for i in ElementList:
-            ElementMatrix[index].append(0)
-    if element not in ElementList:
-        ElementList.append(element)
-        for i in range(len(ElementMatrix)):
-            ElementMatrix[i].append(0)
-    column = ElementList.index(element)
-    ElementMatrix[index][column] += count * side
-
+                else:  # blank just means 1 (code is still the same as above
+                    amount = 1
+                    if index == len(CoefficientMatrix):
+                        CoefficientMatrix.append([])
+                        for iteration in ElementList:
+                            CoefficientMatrix[index].append(0)
+                    if parsed_list[i] not in ElementList:
+                        ElementList.append(parsed_list[i])
+                        for j in range(len(CoefficientMatrix)):
+                            CoefficientMatrix[j].append(0)
+                    col = ElementList.index(parsed_list[i])
+                    CoefficientMatrix[index][col] = amount * side
 
 def gcd(a, b):  # euclidean algorithm
     if a == 0:
@@ -390,7 +436,6 @@ def gcd(a, b):  # euclidean algorithm
 
 def balance_ionic(pos_ion, neg_ion):
     global CURSOR
-
     # get charge from database
     charge1 = CURSOR.execute("SELECT charge FROM elements WHERE symbol = ?", [pos_ion]).fetchone()
     if charge1 is None:
