@@ -25,10 +25,13 @@ DATABASE = 'project.db'
 PERIODIC_TABLE = 'periodic_table.csv'  # as taken from Alberta Education chemistry data booklet
 POLYATOMIC_IONS = 'polyatomic_ions.csv'
 Subscript = {"1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "0": "₀", }
+Anti_Subscript = {i: j for j, i in Subscript.items()}
 
-# Lists used as global variables for balancing
+# Lists used as global variables for balancing/stoich
 CoefficientMatrix = []
 ElementList = []
+LoadedEquation = []  # this will just be a list in a list when used since all the code is written in functions by design
+EquationCoeff = []
 # coroutines (events)
 
 
@@ -49,35 +52,40 @@ async def on_disconnect():
 
 @Bot.command(name='help', aliases=['h', 'commands'])  # custom help command
 async def help_message(ctx):
-    embed = discord.Embed(title="Chem-Bot",
+    embed = discord.Embed(title="Untitled Chemistry Bot",
                           description='''Bot that helps with chemistry and whilst taking up my processor power and RAM. 
-Data was taken from Alberta Chemistry 30 Data Booklet. 
-(https://www.alberta.ca/assets/documents/edc-chemistry30-data-booklet.pdf)''',
+                          
+Database data was taken from Alberta Chemistry 30 Data Booklet.
+(https://www.alberta.ca/assets/documents/edc-chemistry30-data-booklet.pdf)
+
+Equation balancing code was written following tutorial by Mohammad-Ali Bandzar
+(Bandzar, M.-A. (2020, May 27). Balancing Chemical Equations With Python. Medium. https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b. )''',
                           color=5935975)
-    embed.add_field(name="Basic Commands",
-                    value='''
-```
-+help: Shows this message
-+hello: Say hello!
-+say (text): Say whatever is after the command
-```
-                        ''',
-                    inline=False)
-    embed.add_field(name="Actual Commands (WIP)",
+    embed.add_field(name="Element/Ion Database",
                     value='''```
-+database (Element / Ion) (symbol): Get element/ion data
-    +database add (ion name) (ion formula) [charge]
-    +database delete (ion name)```
-```+balance (equation): Balances equations
-        +balance help: formatting help (WIP)```
-```+convert (value) (conversion):
-    +convert help: shows supported conversion list```
-```+calculate [help]: see detail
-    +calculate stoichiometry  (WIP)
-    +calculate gas 
-    +calculate moles ```
-```+solubility (positive ion) (negative ion)```
-```+formulas: In case you are too lazy to find a formula sheet (WIP)```''',
++database (Element / Ion) (symbol): Gets element/ion data
++database add (ion name) (ion formula) (charge)
++database delete (ion name)```''',
+                    inline=False)
+    embed.add_field(name="Balance Equation | +balance help",
+                    value='''```+balance (equation): Balances equations```''',
+                    inline=False)
+    embed.add_field(name="Unit Conversion | +convert help",
+                    value='```+convert (value) (conversion): Converts one unit to another```',
+                    inline=False)
+    embed.add_field(name="Solubility (Ionic Compounds)",
+                    value='```+solubility (positive ion) (negative ion)```',
+                    inline=False)
+    embed.add_field(name="Calculations | +calculate help for more info",
+                    value='''```
++calculate gas 
++calculate moles```''',
+                    inline=False)
+    embed.add_field(name="Stoichiometry | +stoich help for more info",
+                    value='''```
++stoich load
++stoich show
++stoich calculate```''',
                     inline=False)
     await ctx.send(embed=embed)
 
@@ -88,10 +96,17 @@ async def hello(ctx):
     await message.add_reaction('\N{THUMBS UP SIGN}')
 
 
-@Bot.command(name='say')  # repeat all arguments given after command
-async def say(ctx):
-    await ctx.send(ctx.message.content[4:])
-
+@Bot.command(name='purge')  # delete messages (just testing functionality, remove later)
+async def say(ctx, arg=0):
+    try:
+        number = int(arg)
+        if number > 10:
+            number = 1
+    except ValueError:
+        number = 0
+    if ctx.message.author.id == 308971649070268416:
+        deleted = await ctx.message.channel.purge(limit=number)
+        await ctx.send(f"```Deleted {len(deleted)} messages from channel {ctx.message.channel}```")
 
 
 @Bot.command(name='database', aliases=['data', 'dat', 'd'])  # reading, writing, deleting from database
@@ -113,7 +128,7 @@ async def output_database(ctx, subcmd='', arg1=None, arg2=None, arg3=None):  # t
             await ctx.send(embed=embed)
 
     elif subcmd.lower().startswith('a') or subcmd.lower().startswith('w') :  # adding ion (writing ion)
-        try:  # in case of index error
+        try:  # in case of row error
             success = add_ion(arg1, arg2, arg3)  # outcome of write command
             if success == 'Success':
                 await ctx.send(f"```Successfully added {arg1} to database```")
@@ -137,17 +152,6 @@ Example: +data add Acetate CH3COO 1-```''')
             await ctx.send(f"```Successfully reloaded database```")
     else:
         await ctx.send("```Invalid command format | +help for list of commands```")
-
-
-@Bot.command(name='molar_mass', aliases=["mole", "m", "molarmass"])
-async def calculate_mm(ctx, arg):
-    formula, result = molar_mass(arg)
-    formula = ''.join(formula)
-    if not formula:  # could not read formula
-        await ctx.send(f"```Invalid formula given: {arg} (Formulas are case-sensitive)```")
-    else:
-        formula = convert_subscript(formula)
-        await ctx.send(f"```Molar mass of {formula}: {result} g/mol```")
 
 
 @Bot.command(name='conversion', aliases=["convert", 'con'])
@@ -192,7 +196,7 @@ Supported Conversions:
         await ctx.send(f"```Could not find requested conversion | +convert help to show list of conversions```")
 
 
-@Bot.command(name='solubility', aliases=["soluble", 'sol', 's'])
+@Bot.command(name='solubility', aliases=["soluble", 'sol'])
 async def soluble(ctx, pos_ion, neg_ion):
     result = test_soluble(pos_ion, neg_ion)
     formula = balance_ionic(pos_ion, neg_ion)
@@ -222,11 +226,7 @@ Replace a parameter with a word (i.e 'find') to calculate for value. (Any other 
 Example: +calculate gas 120 2.0 1.0 find```''',
                         inline=False)
 
-        embed.add_field(name="Stoichiometry",
-                        value='''```
-WIP```''',
-                        inline=False)
-        embed.add_field(name="Molar Mass | +calculate mole (formula)",
+        embed.add_field(name="Molar Mass | +calculate moles (formula)",
                         value='''```
 formula: Ionic compound formula (case-sensitive)```''',
                         inline=False)
@@ -254,12 +254,12 @@ formula: Ionic compound formula (case-sensitive)```''',
                         await ctx.send("```Can't calculate if all the values are already provided```")
                     except ValueError:  # need to calculate for temp
                         t = (p*v)/(r*n)
-                        await ctx.send(f"```Temperature: {round(t, 3)}K```")
+                        await ctx.send(f"```Temperature: {round(t, 5)}K```")
                 except ValueError:  # calculate n
                     try:
                         t = float(t)
                         n = (p*v)/(r*t)
-                        await ctx.send(f"```Moles: {round(n, 3)} mol```")
+                        await ctx.send(f"```Moles: {round(n, 5)} mol```")
                     except ValueError:
                         await ctx.send("```Invalid command format | +calculate help```")
             except ValueError:
@@ -267,7 +267,7 @@ formula: Ionic compound formula (case-sensitive)```''',
                     n = float(n)
                     t = float(t)
                     v = (n*r*t)/p
-                    await ctx.send(f"```Volume: {round(v, 3)}L```")
+                    await ctx.send(f"```Volume: {round(v, 5)}L```")
                 except ValueError:
                     await ctx.send("```Invalid command format | +calculate help```")
         except ValueError:
@@ -276,38 +276,143 @@ formula: Ionic compound formula (case-sensitive)```''',
                 n = float(n)
                 t = float(t)
                 p = (n*r*t)/v
-                await ctx.send(f"```Pressure: {round(p, 3)}kPa```")
+                await ctx.send(f"```Pressure: {round(p, 5)}kPa```")
             except ValueError:
                 await ctx.send("```Invalid command format | +calculate help```")
 
     elif subcmd.lower().startswith('m'):  # molar mass calculation (takes only the first argument)
         try:
-            formula, result = molar_mass(args[0])
+            result = molar_mass(args[0])
         except IndexError:
             await ctx.send("```Invalid command format | +calculate help```")
             return
-        formula = ''.join(formula)
-        if not formula:  # could not read formula
+        if not result:  # could not read formula
             await ctx.send(f"```Invalid formula given: {args[0]} (Formulas are case-sensitive)```")
         else:
-            formula = convert_subscript(formula)
+            formula = convert_subscript(args[0])
             await ctx.send(f"```Molar mass of {formula}: {result} g/mol```")
 
-    elif subcmd.lower().startswith('s'):
-        # solution based from https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b
-        pass
     else:
         await ctx.send("```Invalid command format | +calculate help```")
 
 
+@Bot.command(name='stoichiometry', aliases = ["stoich", 'equation', 'e'])
+async def stoich_commands(ctx, subcmd, *args):
+    if subcmd.lower().startswith('h'):  # help
+        embed = discord.Embed(title="Chemical Equations (Stoichiometry)", color=4905928)
+        embed.add_field(name="Load equation | +stoich load (equation)",
+                        value='''```
+equation: unbalanced equation
+i.e. +cal stoich load NO3 + Co = Co(NO3)2```''',
+                        inline=False)
+        embed.add_field(name="Load equation | +stoich show",
+                        value='''```
+Shows currently loaded equation```''',
+                        inline=False)
+        embed.add_field(name="Load equation | +stoich calculate (id) (unit) (value) (id2) (unit2)",
+                        value='''```
+Converts amount of one substance to another based on balanced equation:
+id: id number of molecule
+unit: grams or moles (default to moles)
+value: number of grams or moles
+id2: id number of molecule to calculate for
+
+Example: +stoich cal 1 grams 20.3 3 grams```''',
+                        inline=False)
+        await ctx.send(embed=embed)
+
+    if subcmd.lower().startswith("l"):  # load equation
+        try:
+            equation = balance(''.join(args))
+            LoadedEquation.clear()
+            LoadedEquation.append(equation)  # stores raw equation data (for displaying)
+            EquationCoeff.clear()
+            for i in equation:
+                if not i.isdigit() and not i == '' and not i == ' + ' and not i == ' -> ':
+                    coefficient = equation[equation.index(i) - 1]
+                    if coefficient == '':
+                        coefficient = 1
+                    else:
+                        coefficient = int(coefficient)
+                    EquationCoeff.append([coefficient, convert_subscript(i, False)])
+            await ctx.send("```Balanced equation loaded to memory.```")
+            await ctx.send(embed=show_equation())
+        except IndexError:
+            await ctx.send("```Invalid equation formatting | +balance help for details```")
+        except TypeError:
+            await ctx.send("```Could not find a way to balance equation```")
+
+    elif subcmd.lower().startswith("s"):  # show loaded equation again
+        if LoadedEquation:  # if list is not empty
+            await ctx.send(embed=show_equation())
+        else:
+            await ctx.send("```Please load an equation first | +stoich load (equation)```")
+
+    elif subcmd.lower().startswith("c"):  # calculate with mole ratio
+        try:
+            index = abs(int(args[0])) - 1  # don't want to deal with negative index numbers
+            unit = args[1]
+            value = float(args[2])
+            output_index = abs(int(args[3])) - 1
+            output_unit = args[4]
+        except IndexError or ValueError:
+            await ctx.send("```Invalid command format | +stoich help```")
+            return
+        if index < len(EquationCoeff) and output_index < len(EquationCoeff):
+            ratio = EquationCoeff[output_index][0] / EquationCoeff[index][0]
+            # mole ratio of requested molecule to given molecule
+
+            if unit.lower().startswith('g'):  # if user inputted grams
+                mole_mass = molar_mass(EquationCoeff[index][1])  # we don't need formula in this case
+                if mole_mass is None:
+                    await ctx.send(f"```Could not find molar mass of molecule '{EquationCoeff[index][1]}'```")
+                    return
+                moles = value / mole_mass
+            else:  # if given unit was moles
+                moles = value
+
+            moles = moles * ratio  # calculate moles of requested molecule
+            output_molecule = convert_subscript(EquationCoeff[output_index][1])
+
+            if output_unit.lower().startswith('g'):  # if user inputted grams
+                mole_mass = molar_mass(EquationCoeff[output_index][1])
+                # we can reuse variable names since they are no longer needed
+                if mole_mass is None:
+                    await ctx.send(f"```Could not find molar mass of molecule '{output_molecule}'```")
+                    return
+                await ctx.send(f"```The calculated mass of {output_molecule} is {round(moles * mole_mass, 5)} grams.```")
+            else:
+                await ctx.send(f"```The calculated quantity of {output_molecule} is {round(moles, 5)} moles.```")
+
+
 @Bot.command(name='balance', aliases=["b", 'bal'])
 async def balance_equation(ctx, *arg):
-    output = balance(''.join(arg))  # spaces don't actually change output this way
-    await ctx.send(f"```Balanced equation: {''.join(output)}```")
+    if arg[0].lower() == 'help':  # user has to type out all of help since equations can also start with h
+        embed = discord.Embed(title="Equation Balancing", color=4905928, description='''```
++balance (unbalanced equation):
+
+i.e. +balance C6H12O6 + O2 = CO2 + H2O 
+
+> Equation is case-sensitive
+> Spaces between terms are technically optional
+> Use '=' instead of '->'
+> Calculator can't do polyatomic decomposition```''')
+        await ctx.send(embed=embed)
+    else:
+        try:
+            output = balance(''.join(arg))  # join arguments so spaces don't actually change output this way
+            if output is None:
+                await ctx.send("```Could not find a way to balance equation```")
+            else:
+                await ctx.send(f"```Balanced equation: {''.join(output)}```")
+        except ValueError:  # in theory all errors related to bad inputs are IndexErrors
+            await ctx.send("```Invalid command format | +balance help```")
 
 
 # subroutines
-# processing (input and outputs are async commands listen earlier)
+# processing (input and outputs are mostly handled by the command systems
+
+
 def transpose(matrix):
     # transpose 'matrix' (sympy can do this too, but I would rather stay with standard library as much as possible
     rows = len(matrix)
@@ -325,8 +430,10 @@ def transpose(matrix):
 def balance(equation):  # very verbose comments (since I don't fully understand it)
 
     equation = equation.split('=')
+
+    # get reactants and products in separate lists (have to make sure there are multiple terms '+' first)
     reactants = equation[0].split('+')
-    products = equation[1].split('+')  # get reactants and products in separate lists
+    products = equation[1].split('+')
 
     for i in range(len(reactants)):  # puts terms into matrix
         add_matrix(reactants[i], i, 1)
@@ -336,15 +443,21 @@ def balance(equation):  # very verbose comments (since I don't fully understand 
     # must use sympy (or numpy i think) to find null space
     # I guess this function can't be marked for alberta curriculum project?
     # (trying to reduce amount of modules used but no idea how to do this otherwise)
-    answer = Matrix(transpose(CoefficientMatrix)).nullspace()[0]  # take the first item in transposed null space matrix
-    denominators = []
+    try:
+        answer = Matrix(transpose(CoefficientMatrix))  # converts to matrix object
+        answer = answer.nullspace()[0]  # take the first item in transposed null space matrix  (sympy method)
+    except IndexError:  # no answer was found (for whatever reason)
+        CoefficientMatrix.clear()
+        ElementList.clear()
+        return None
+
+    denominators = []  # get integer answers (since nullspace()[0] returns fractions)
     for i in answer:
-        print(type(i))
         denominators.append(i.q)  # add denominators of each coefficient to find lcm
         # .q means denominator in (p/q), since values in answers are actually sympy objects
     multiple = lcm(denominators)
     answer = answer * multiple   # multiply matrix by lcm
-    coeff = answer.tolist()  # turns matrix to array
+    coeff = answer.tolist()  # turns matrix to array (sympy method)
 
     output = []
     for i in range(len(reactants)):
@@ -373,8 +486,8 @@ def balance(equation):  # very verbose comments (since I don't fully understand 
     return output
 
 
-def add_matrix(compound, index, side):
-    # need reg expressions to avoid typing a LOT of extra lines
+def add_matrix(compound, row, side):
+    # need reg expressions to parse user input without comparing to entire periodic table
     segments = re.split('(\([A-Za-z0-9]*\)[0-9])', compound)  # find anything surrounded by parenthesis
     # therefore does not support polyatomic decomposition reactions (which are beyond scope of high school chem)
     for segment in segments:
@@ -399,34 +512,35 @@ def add_matrix(compound, index, side):
                 # element is not blank string
                 if parsed_list[i + 1].isdigit():  # matches all coefficients which are not blank
                     amount = int(parsed_list[i + 1]) * multiplier  # take number and multiplier (element coefficient)
-                    if index == len(CoefficientMatrix):
-                        # if matrix needs new row (add row when index number is same as length of matrix), first element of each molecule will trigger this statement
+                    if row == len(CoefficientMatrix):
+                        # if matrix needs new row (add row when row number is same as length of matrix), first element of each molecule will trigger this statement
                         # new row for each reactant / product
                         CoefficientMatrix.append([])
                         for iteration in ElementList:
-                            CoefficientMatrix[index].append(0)  # fill row with zeros for each element in molecule
+                            CoefficientMatrix[row].append(0)  # fill row with a blank value for each element in molecule (create columns)
                     if parsed_list[i] not in ElementList:  # if the element was not already added
                         ElementList.append(parsed_list[i])  # add element to the list of elements (elements will be in same order so they can be put together)
                         for j in range(len(CoefficientMatrix)):
-                            CoefficientMatrix[j].append(0)  # add zero to every row in matrix for each new element
+                            CoefficientMatrix[j].append(0)
 
-                    col = ElementList.index(parsed_list[i])  # find index number of element in the element list
-                    CoefficientMatrix[index][col] = amount * side  # side is 1 for reactants is -1 for products
+                    col = ElementList.index(parsed_list[i])  # find row number of element in the element list
+                    CoefficientMatrix[row][col] += amount * side  # side is 1 for reactants is -1 for products
                     # replaces the zero with an actual number (amount of that element)
                     i += 1  # add extra 1 to i to get to the next number in list (skip the elements)
 
                 else:  # blank just means 1 (code is still the same as above
-                    amount = 1
-                    if index == len(CoefficientMatrix):
+                    amount = multiplier  # since the amount is 1, 1 * multiplier is = multiplier
+                    if row == len(CoefficientMatrix):
                         CoefficientMatrix.append([])
                         for iteration in ElementList:
-                            CoefficientMatrix[index].append(0)
+                            CoefficientMatrix[row].append(0)
                     if parsed_list[i] not in ElementList:
                         ElementList.append(parsed_list[i])
                         for j in range(len(CoefficientMatrix)):
                             CoefficientMatrix[j].append(0)
                     col = ElementList.index(parsed_list[i])
-                    CoefficientMatrix[index][col] = amount * side
+                    CoefficientMatrix[row][col] += amount * side
+
 
 def gcd(a, b):  # euclidean algorithm
     if a == 0:
@@ -512,10 +626,9 @@ def test_soluble(pos_ion, neg_ion):
 # add and delete from database
 def add_ion(name, formula, charge):
     name = name.capitalize()
-    formula, mass = molar_mass(formula)
-    if not formula:  # if molar_mass returned False (formula invalid)
+    mass = molar_mass(formula)
+    if not mass:  # if molar_mass returned False (formula invalid)
         return False
-    formula = ''.join(formula)
     global CURSOR, CONNECTION
     try:
         CURSOR.execute('INSERT INTO ions VALUES(?, ?, ?, ?) ;', [name, formula, charge, mass])
@@ -536,15 +649,6 @@ def delete_ion(formula):
     else:
         CURSOR.execute('DELETE FROM ions WHERE formula = ?;', [formula])
         CONNECTION.commit()
-
-
-def convert_subscript(text):   # subscript for formula numbers
-    new_text = []
-    for i in text:
-        if i.isnumeric():
-            i = Subscript[i]
-        new_text.append(i)
-    return ''.join(new_text)
 
 
 def load_elements(table):
@@ -575,8 +679,7 @@ def load_ions(table):  # almost the same code as above
     for i in range(len(content)):
         content[i] = content[i].split(',')
         content[i][-1] = content[i][-1][:-1]
-        formula, content[i][3] = molar_mass(content[i][1])
-        content[i][1] = ''.join(formula)
+        content[i][3] = molar_mass(content[i][1])
     print("Initializing ion database")
     CURSOR.execute('''
         CREATE TABLE 
@@ -596,12 +699,33 @@ def molar_mass(formula):
     :return: (list) Parsed formula, (float) molar mass
     '''
     global CURSOR
-    parsed_formula = []
     total = 0
-    for i in range(len(formula)):  # each letter can be upper case, lower case or a number
+    i = 0
+    while i < len(formula):  # each letter can be upper case, lower case or a number
         coeff = None
         element = None
-        if formula[i].isupper():  # the letter is capital (start of new element)
+
+        if formula[i] == '(':  # this code was added later to calculate for all polyatomic ionic compounds
+            # basically it just calculates the molar mass of formula inside brackets with this function (recursive)
+            # then multiplies it by the coefficient at the end
+            # i wish i used regex for this now but now its too late
+            j = i + 1
+            while formula[j] != ')':
+                j += 1
+            mass = float(molar_mass(formula[i + 1:j]))
+            k = j + 1
+            while formula[k].isnumeric():
+                if k + 1 < len(formula):
+                    k += 1
+                else:
+                    k += 1
+                    break
+            coeff = int(formula[j + 1:k])
+            total += mass * coeff
+            i = k - 1
+
+
+        elif formula[i].isupper():  # the letter is capital (start of new element)
             try:  # we don't know if there are any more letters in the string
                 if formula[i + 1].islower():  # the letter after is lowercase (two letter elements)
                     element = formula[i:(i + 2)]
@@ -615,7 +739,7 @@ def molar_mass(formula):
                                 else:
                                     j = j + 1
                                     break
-                            coeff = formula[i + 2:j]
+                            coeff = int(formula[i + 2:j])
                     except IndexError:
                         pass
                 elif formula[i + 1].isnumeric():
@@ -626,8 +750,8 @@ def molar_mass(formula):
                         else:
                             j = j + 1
                             break
+                    coeff = int(formula[i + 1:j])
                     element = formula[i]
-                    coeff = formula[i + 1:j]
                 elif formula[i + 1].isupper():  # next element, no coefficient
                     element = formula[i]
             except IndexError:
@@ -636,20 +760,51 @@ def molar_mass(formula):
             # add to parsed formula
             if coeff is None:
                 coeff = 1
-                parsed_formula.append(element)
-            if coeff != 1:
-                parsed_formula.append(element + str(coeff))
 
             # search element database for mass
             mass = CURSOR.execute("SELECT molar_mass FROM elements WHERE symbol = ?", [element]).fetchone()
             if mass is None:
-                return False, False  # return that the formula is invalid
+                return False  # return that the formula is invalid
             mass = mass[0]
             if mass.startswith('('):  # if mass is in brackets
                 mass = mass[1:-1]
             total = total + (float(mass) * int(coeff))
-    return parsed_formula, round(total, 2)  # does not use significant digits (not enough time to implement)
 
+        i += 1
+
+    return round(total, 2)  # does not use significant digits (not enough time to implement)
+
+# outputs  (mostly just formatting and creating embeds)
+
+def show_equation():
+    embed = discord.Embed(title="Loaded Equation:",
+                          description=''.join(LoadedEquation[0]),
+                          color=4905928)
+    molecule_list = ''
+    for i in range(len(EquationCoeff)):
+        molecule_list += f"{i+1}: {EquationCoeff[i][1]}\n"
+    embed.add_field(name="Molecules",
+                    value=molecule_list,
+                    inline=False)  # displays element name
+    return embed
+
+
+def convert_subscript(text, direction=True):   # subscript for formula numbers; true means convert to, false convert from
+    new_text = []
+    if direction:
+        for i in text:
+            if i.isnumeric():
+                i = Subscript[i]
+            new_text.append(i)
+        return ''.join(new_text)
+    else:
+        for i in text:  # Added in retrospect
+            if i in Anti_Subscript:
+                i = Anti_Subscript[i]
+                new_text.append(i)
+            else:
+                new_text.append(i)
+        return ''.join(new_text)
 
 def read_element(search):
     global CURSOR
