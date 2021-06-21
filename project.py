@@ -1,42 +1,50 @@
 '''
-title: Discord bot
+title: Discord chemistry bot
 author: Daniel Zhang
 data-created: 2021-06-11
 '''
-# last embed colour: 4905928
+# standard library (os module is only used to environmental variables)
 import os
 import pathlib
 import sqlite3
 import re
 
-import discord  # required dependency
+# required dependency | py -m pip install discord.py  (for windows)
+import discord
 from discord.ext import commands
-# py -m pip install python-dotenv (not required) | py -m pip install discord.py
-from dotenv import load_dotenv  # for keeping the bot token secure (just add a token in code for handing in)
 
+# py -m pip install python-dotenv (remove later)
+from dotenv import load_dotenv
+
+# optional dependency for equation balancing | py -m pip install sympy
 try:
-    from sympy import Matrix, lcm  # py -m pip install sympy
+    from sympy import Matrix, lcm
 except ModuleNotFoundError:
     print("Dependencies required to preform equation balancing were not found, stoichometric functions will be unavailable")
 
-
 Bot = commands.Bot(command_prefix='+', help_command=None)
+# change bot command prefix to '+' and create custom help command
+
 DATABASE = 'project.db'
-PERIODIC_TABLE = 'periodic_table.csv'  # as taken from Alberta Education chemistry data booklet
+PERIODIC_TABLE = 'periodic_table.csv'  # taken from chemistry data booklet
 POLYATOMIC_IONS = 'polyatomic_ions.csv'
+
+# discord markdown has no subscript formatting option
 Subscript = {"1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "0": "₀", }
 Anti_Subscript = {i: j for j, i in Subscript.items()}
 
-# Lists used as global variables for balancing/stoich
-CoefficientMatrix = []
-ElementList = []
-LoadedEquation = []  # this will just be a list in a list when used since all the code is written in functions by design
-EquationCoeff = []
-# coroutines (events)
+# Lists used as global/memory variables for balancing/stoich
+CoefficientMatrix = []  # matrix of the number of each element of an unbalanced equation
+ElementList = []  # names of element for each matrix row
+LoadedEquation = []  # this will just be a list in a list to send data between functions
+EquationCoeff = []  # stores the coefficient, then name of molecule (for easier stoich calculation code)
+
+
+# coroutines (events)  (the flowchart is going to be a mess)
 
 
 @Bot.event
-async def on_ready():
+async def on_ready():  # when bot connects
     await Bot.change_presence(
         activity=discord.Activity(type=discord.ActivityType.listening, name='your every command | +help')
     )
@@ -51,41 +59,38 @@ async def on_disconnect():
 
 
 @Bot.command(name='help', aliases=['h', 'commands'])  # custom help command
-async def help_message(ctx):
+async def help_message(ctx):  # bot command event passes context (ctx) parameter always, and will crash if function does not accept parameters
+    # ctx contains the message object, as well as lets you reply directly with ctx.send('Message')
     embed = discord.Embed(title="Untitled Chemistry Bot",
-                          description='''Bot that helps with chemistry and whilst taking up my processor power and RAM. 
-                          
-Database data was taken from Alberta Chemistry 30 Data Booklet.
-(https://www.alberta.ca/assets/documents/edc-chemistry30-data-booklet.pdf)
-
-Equation balancing code was written following tutorial by Mohammad-Ali Bandzar
-(Bandzar, M.-A. (2020, May 27). Balancing Chemical Equations With Python. Medium. https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b. )''',
+                          description='''Bot that helps with chemistry and whilst taking up my processor power and RAM.                    
+\nEquation balancing code was written following a guide by Mohammad-Ali Bandzar:
+\n(Bandzar, M.-A. (2020, May 27). Balancing Chemical Equations With Python. Medium. Retrieved from: https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b. )''',
                           color=5935975)
     embed.add_field(name="Element/Ion Database",
                     value='''```
 +database (Element / Ion) (symbol): Gets element/ion data
 +database add (ion name) (ion formula) (charge)
-+database delete (ion name)```''',
++database delete (ion name, * to reset databases)```''',
                     inline=False)
     embed.add_field(name="Balance Equation | +balance help",
-                    value='''```+balance (equation): Balances equations```''',
+                    value='''```+balance (equation): \nBalances equations```''',
                     inline=False)
     embed.add_field(name="Unit Conversion | +convert help",
-                    value='```+convert (value) (conversion): Converts one unit to another```',
+                    value='```+convert (value) (conversion): \nConverts one unit to another```',
                     inline=False)
-    embed.add_field(name="Solubility (Ionic Compounds)",
-                    value='```+solubility (positive ion) (negative ion)```',
+    embed.add_field(name="Ionic Compound Formation",
+                    value='```+ionic (pos ion) (neg ion): \nBalances and determines solubility (most common charge)```',
                     inline=False)
     embed.add_field(name="Calculations | +calculate help for more info",
                     value='''```
-+calculate gas 
-+calculate moles```''',
++calculate gas (p) (v) (n) (t)
++calculate moles (formula)```''',
                     inline=False)
     embed.add_field(name="Stoichiometry | +stoich help for more info",
                     value='''```
-+stoich load
++stoich load (equation)
 +stoich show
-+stoich calculate```''',
++stoich calculate (id) (unit) (value) (id2) (unit2)```''',
                     inline=False)
     await ctx.send(embed=embed)
 
@@ -106,13 +111,14 @@ async def say(ctx, arg=0):
         number = 0
     if ctx.message.author.id == 308971649070268416:
         deleted = await ctx.message.channel.purge(limit=number)
-        await ctx.send(f"```Deleted {len(deleted)} messages from channel {ctx.message.channel}```")
+        # await ctx.send(f"```Deleted {len(deleted)} messages from channel {ctx.message.channel}```")
 
 
 @Bot.command(name='database', aliases=['data', 'dat', 'd'])  # reading, writing, deleting from database
+# aliases are just alternate names for command (+database and +data will run the same command)
 async def output_database(ctx, subcmd='', arg1=None, arg2=None, arg3=None):  # takes context, subcommand, and 3 arguements
     # variables are given default values of 'None' so that error messages can be displayed
-
+    # subcmd, arg1-3 are all arguments (the first 4 words user types after command), and have default values
     if subcmd.lower().startswith("e"):  # search periodic table for element
         arg1 = arg1[:2].capitalize()
         embed = read_element(arg1)
@@ -129,7 +135,7 @@ async def output_database(ctx, subcmd='', arg1=None, arg2=None, arg3=None):  # t
 
     elif subcmd.lower().startswith('a') or subcmd.lower().startswith('w') :  # adding ion (writing ion)
         try:  # in case of row error
-            success = add_ion(arg1, arg2, arg3)  # outcome of write command
+            success = add_ion(arg1, arg2, arg3)  # success is the outcome of write command
             if success == 'Success':
                 await ctx.send(f"```Successfully added {arg1} to database```")
             elif success == 'Duplicate':
@@ -171,32 +177,40 @@ Supported Conversions:
 > 'mmhg-atm'
 > 'atm-mmhg'```''')
         return
-    try:
-        value = float(value)
-    except ValueError:
-        await ctx.send("```Conversion value must be a number. | +convert help```")
-        return
+    if value.isnumeric():  # is integer
+        decimal_places = 1
+    else:
+        try:
+            decimal_places = len(value.split('.')[1])
+            value = float(value)
+        except ValueError:
+            await ctx.send("```Conversion value must be a number. | +convert help```")
+            return
+        except IndexError:
+            await ctx.send("```Conversion value must be a number. | +convert help```")
+            return
+
     if conversion.lower() == 'c-k':  # C>K
-        await ctx.send(f"```{value}°C = {round(value + 273.15, 4)}K```")
+        await ctx.send(f"```{value}°C = {round(value + 273.15, decimal_places)}K```")
     elif conversion.lower() == 'k-c':  # K>C
-        await ctx.send(f"```{value}K = {round(value - 273.15, 4)}°C```")
+        await ctx.send(f"```{value}K = {round(value - 273.15, decimal_places)}°C```")
     elif conversion.lower() == 'kpa-atm':
-        await ctx.send(f"```{value}kPa = {round(value / 101.325, 6)}Atm```")
+        await ctx.send(f"```{value}kPa = {round(value / 101.325, decimal_places)}Atm```")
     elif conversion.lower() == 'atm-kpa':
-        await ctx.send(f"```{value}Atm = {round(value * 101.325, 6)}kPa```")
+        await ctx.send(f"```{value}Atm = {round(value * 101.325, decimal_places)}kPa```")
     elif conversion.lower() == 'kpa-mmhg':
-        await ctx.send(f"```{value}kPa = {round(value * 7.50062, 6)}mmHg```")
+        await ctx.send(f"```{value}kPa = {round(value * 7.50062, decimal_places)}mmHg```")
     elif conversion.lower() == 'mmhg-kpa':
-        await ctx.send(f"```{value}mmHg = {round(value / 7.50062, 6)}kPa```")
+        await ctx.send(f"```{value}mmHg = {round(value / 7.50062, decimal_places)}kPa```")
     elif conversion.lower() == 'mmhg-atm':
-        await ctx.send(f"```{value}mmHg = {round(value / 760, 6)}Atm```")
+        await ctx.send(f"```{value}mmHg = {round(value / 760, decimal_places)}Atm```")
     elif conversion.lower() == 'atm-mmhg':
-        await ctx.send(f"```{value}Atm = {round(value * 760, 6)}mmHg```")
+        await ctx.send(f"```{value}Atm = {round(value * 760, decimal_places)}mmHg```")
     else:
         await ctx.send(f"```Could not find requested conversion | +convert help to show list of conversions```")
 
 
-@Bot.command(name='solubility', aliases=["soluble", 'sol'])
+@Bot.command(name='ionic', aliases=["soluble", 'sol', 'ion', 'i'])
 async def soluble(ctx, pos_ion, neg_ion):
     result = test_soluble(pos_ion, neg_ion)
     formula = balance_ionic(pos_ion, neg_ion)
@@ -242,27 +256,28 @@ formula: Ionic compound formula (case-sensitive)```''',
         except IndexError:
             await ctx.send("```Incorrect number of parameters given | +calculate help```")
             return
-        r = 8.314
+        r = 8.314  # gas constant for units used
         try:  # lots of error checking to figure out what the user inputted
+            # this is defnitely not good code, but I'm not sure how else to test for floats
             p = float(p)
             try:
                 v = float(v)
                 try:
                     n = float(n)
-                    try:
+                    try:  # user inputted all values of gas law (so theres nothing to calculate for)
                         t = float(t)
                         await ctx.send("```Can't calculate if all the values are already provided```")
-                    except ValueError:  # need to calculate for temp
+                    except ValueError:  # calculate for t ans p, v, and n are floats and t is not
                         t = (p*v)/(r*n)
                         await ctx.send(f"```Temperature: {round(t, 5)}K```")
-                except ValueError:  # calculate n
+                except ValueError:  # calculate n, as p and v are float and n is not float
                     try:
                         t = float(t)
                         n = (p*v)/(r*t)
                         await ctx.send(f"```Moles: {round(n, 5)} mol```")
                     except ValueError:
                         await ctx.send("```Invalid command format | +calculate help```")
-            except ValueError:
+            except ValueError:  # calculating for v as p is float and v is not float
                 try:
                     n = float(n)
                     t = float(t)
@@ -270,7 +285,7 @@ formula: Ionic compound formula (case-sensitive)```''',
                     await ctx.send(f"```Volume: {round(v, 5)}L```")
                 except ValueError:
                     await ctx.send("```Invalid command format | +calculate help```")
-        except ValueError:
+        except ValueError:  # calculating for p as p is not float
             try:
                 v = float(v)
                 n = float(n)
@@ -296,7 +311,7 @@ formula: Ionic compound formula (case-sensitive)```''',
         await ctx.send("```Invalid command format | +calculate help```")
 
 
-@Bot.command(name='stoichiometry', aliases = ["stoich", 'equation', 'e'])
+@Bot.command(name='stoichiometry', aliases=["stoich", 'equation', 'e'])
 async def stoich_commands(ctx, subcmd, *args):
     if subcmd.lower().startswith('h'):  # help
         embed = discord.Embed(title="Chemical Equations (Stoichiometry)", color=4905928)
@@ -322,25 +337,33 @@ Example: +stoich cal 1 grams 20.3 3 grams```''',
         await ctx.send(embed=embed)
 
     if subcmd.lower().startswith("l"):  # load equation
+
         try:
-            equation = balance(''.join(args))
-            LoadedEquation.clear()
-            LoadedEquation.append(equation)  # stores raw equation data (for displaying)
-            EquationCoeff.clear()
-            for i in equation:
-                if not i.isdigit() and not i == '' and not i == ' + ' and not i == ' -> ':
-                    coefficient = equation[equation.index(i) - 1]
-                    if coefficient == '':
-                        coefficient = 1
-                    else:
-                        coefficient = int(coefficient)
-                    EquationCoeff.append([coefficient, convert_subscript(i, False)])
-            await ctx.send("```Balanced equation loaded to memory.```")
-            await ctx.send(embed=show_equation())
+            equation = balance(''.join(args))  # try to balance
         except IndexError:
             await ctx.send("```Invalid equation formatting | +balance help for details```")
-        except TypeError:
-            await ctx.send("```Could not find a way to balance equation```")
+            return
+        except TypeError:  # this shouldn't ever happen unless theres an bug (or polyatomic decomposition maybe)
+            await ctx.send("```Could not find a way to balance equation.```")
+            return
+        except NameError:  # means that prerequisite modules (sympy) were not installed
+            await ctx.send("```Dependencies for balancing were not found, cannot preform stoich commands.```")
+            return
+
+        LoadedEquation.clear()
+        EquationCoeff.clear()  # clear previously saved data (if applicable)
+        LoadedEquation.append(equation)  # save equation to memory to display
+        for i in equation:
+            if not i.isdigit() and not i == '' and not i == ' + ' and not i == ' -> ':
+                coefficient = equation[equation.index(i) - 1]
+                if coefficient == '':
+                    coefficient = 1
+                else:
+                    coefficient = int(coefficient)
+                EquationCoeff.append([coefficient, convert_subscript(i, False)])
+                # save elements and their coefficients for calculations
+        await ctx.send("```Balanced equation loaded to memory.```")
+        await ctx.send(embed=show_equation())
 
     elif subcmd.lower().startswith("s"):  # show loaded equation again
         if LoadedEquation:  # if list is not empty
@@ -355,15 +378,18 @@ Example: +stoich cal 1 grams 20.3 3 grams```''',
             value = float(args[2])
             output_index = abs(int(args[3])) - 1
             output_unit = args[4]
-        except IndexError or ValueError:
+        except IndexError:
+            await ctx.send("```Invalid command format | +stoich help```")
+            return
+        except ValueError:
             await ctx.send("```Invalid command format | +stoich help```")
             return
         if index < len(EquationCoeff) and output_index < len(EquationCoeff):
             ratio = EquationCoeff[output_index][0] / EquationCoeff[index][0]
             # mole ratio of requested molecule to given molecule
 
-            if unit.lower().startswith('g'):  # if user inputted grams
-                mole_mass = molar_mass(EquationCoeff[index][1])  # we don't need formula in this case
+            if unit.lower().startswith('g'):  # if user inputted grams, convert to moles
+                mole_mass = molar_mass(EquationCoeff[index][1])
                 if mole_mass is None:
                     await ctx.send(f"```Could not find molar mass of molecule '{EquationCoeff[index][1]}'```")
                     return
@@ -396,7 +422,8 @@ i.e. +balance C6H12O6 + O2 = CO2 + H2O
 > Equation is case-sensitive
 > Spaces between terms are technically optional
 > Use '=' instead of '->'
-> Calculator can't do polyatomic decomposition```''')
+> Only use brackets if they will be followed by coefficient
+(i.e. NaNO3, instead of Na(NO3))```''')
         await ctx.send(embed=embed)
     else:
         try:
@@ -405,16 +432,17 @@ i.e. +balance C6H12O6 + O2 = CO2 + H2O
                 await ctx.send("```Could not find a way to balance equation```")
             else:
                 await ctx.send(f"```Balanced equation: {''.join(output)}```")
-        except ValueError:  # in theory all errors related to bad inputs are IndexErrors
+        except IndexError:  # in theory all errors related to bad inputs are IndexErrors
             await ctx.send("```Invalid command format | +balance help```")
-
+        except NameError:  # means that prerequisite modules (sympy) were not installed
+            await ctx.send("```Dependencies for balancing were not found, cannot preform equation balancing.```")
 
 # subroutines
 # processing (input and outputs are mostly handled by the command systems
 
 
 def transpose(matrix):
-    # transpose 'matrix' (sympy can do this too, but I would rather stay with standard library as much as possible
+    # transpose 'matrix' (sympy can do this too, but I would rather stay with standard library as much as possible)
     rows = len(matrix)
     columns = len(matrix[0])
 
@@ -428,20 +456,25 @@ def transpose(matrix):
 
 
 def balance(equation):  # very verbose comments (since I don't fully understand it)
-
+    CoefficientMatrix.clear()
+    ElementList.clear()
+    # in case there was error midway and function crashes
     equation = equation.split('=')
 
     # get reactants and products in separate lists (have to make sure there are multiple terms '+' first)
     reactants = equation[0].split('+')
     products = equation[1].split('+')
 
+    # starting here this is NOT MY ORIGINAL CODE: credit to Mohammad-Ali Bandzar:
+    # Bandzar, M.-A. (2020, May 27). Balancing Chemical Equations With Python. Medium. Retrieved from: https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b.
     for i in range(len(reactants)):  # puts terms into matrix
         add_matrix(reactants[i], i, 1)
     for i in range(len(products)):
         add_matrix(products[i], i + len(reactants), -1)  # product quantities are negative
 
     # must use sympy (or numpy i think) to find null space
-    # I guess this function can't be marked for alberta curriculum project?
+    # I guess this function used for non-ib part of project(?)
+    # Without dependencies, everything but balancing and stoich will still work so its not really a problem
     # (trying to reduce amount of modules used but no idea how to do this otherwise)
     try:
         answer = Matrix(transpose(CoefficientMatrix))  # converts to matrix object
@@ -486,7 +519,7 @@ def balance(equation):  # very verbose comments (since I don't fully understand 
     return output
 
 
-def add_matrix(compound, row, side):
+def add_matrix(compound, row, side):  # also NOT MY CODE (works with previous code)
     # need reg expressions to parse user input without comparing to entire periodic table
     segments = re.split('(\([A-Za-z0-9]*\)[0-9])', compound)  # find anything surrounded by parenthesis
     # therefore does not support polyatomic decomposition reactions (which are beyond scope of high school chem)
@@ -541,8 +574,10 @@ def add_matrix(compound, row, side):
                     col = ElementList.index(parsed_list[i])
                     CoefficientMatrix[row][col] += amount * side
 
+# everything after this is my code again
 
-def gcd(a, b):  # euclidean algorithm
+
+def gcd(a, b):  # i guess this was technically invented by euclid
     if a == 0:
         return b
     return gcd(b % a, a)
@@ -559,7 +594,8 @@ def balance_ionic(pos_ion, neg_ion):
     if charge2 is None:
         charge2 = CURSOR.execute("SELECT charge FROM ions WHERE formula = ?", [neg_ion]).fetchone()
     if charge1 is not None and charge2 is not None:
-        charge2 = charge2[0][0]  # take most common ionic charge
+        # as long as we have charges for both (this could crash if user added charges are invalid)
+        charge2 = charge2[0][0]  # take most common (first) ionic charge
         charge1 = charge1[0][0]
         if charge1.isnumeric() and charge2.isnumeric():
             charge1 = int(charge1)
@@ -568,21 +604,26 @@ def balance_ionic(pos_ion, neg_ion):
             charge1 = charge1 // divisor
             charge2 = charge2 // divisor
 
-            coeff1 = charge2
-            coeff2 = charge1
+            coeff1, coeff2 = charge2, charge1  # charges are really charges anymore, but rather just inverted coeff
 
-            if not coeff1 == 1:
-                for i in pos_ion:
-                    if i.isnumeric():
-                        pos_ion = f"({pos_ion})"
-                        break
+            if not coeff1 == 1:  # need brackets for polyatomic ions
+                if len(pos_ion) > 2 or len(pos_ion) == 2 and pos_ion.isupper():  # if longer than 2 or has 2 capitals (2 elements)
+                    pos_ion = f"({pos_ion})"
+                else:  # or theres a number in the ion formula
+                    for i in pos_ion:
+                        if i.isnumeric():
+                            pos_ion = f"({pos_ion})"
+                            break
             else:
                 coeff1 = ''
-            if not coeff2 == 1:
-                for i in neg_ion:
-                    if i.isnumeric():
-                        neg_ion = f"({neg_ion})"
-                        break
+            if not coeff2 == 1:  # need brackets for polyatomic ions
+                if len(neg_ion) > 2 or len(neg_ion) == 2 and neg_ion.isupper():  # if longer than 2 or has 2 capitals (2 elements)
+                    neg_ion = f"({pos_ion})"
+                else:  # or theres a number in the ion formula
+                    for i in neg_ion:
+                        if i.isnumeric():
+                            neg_ion = f"({neg_ion})"
+                            break
             else:
                 coeff2 = ''
             formula = f"{pos_ion}{coeff1}{neg_ion}{coeff2}"
@@ -693,11 +734,6 @@ def load_ions(table):  # almost the same code as above
 
 
 def molar_mass(formula):
-    '''
-    takes a molecule and returns its molar mass and list of elements/coefficients
-    :param formula: (str) Formula i.e. C6H5COO, C6H12O6
-    :return: (list) Parsed formula, (float) molar mass
-    '''
     global CURSOR
     total = 0
     i = 0
@@ -708,7 +744,6 @@ def molar_mass(formula):
         if formula[i] == '(':  # this code was added later to calculate for all polyatomic ionic compounds
             # basically it just calculates the molar mass of formula inside brackets with this function (recursive)
             # then multiplies it by the coefficient at the end
-            # i wish i used regex for this now but now its too late
             j = i + 1
             while formula[j] != ')':
                 j += 1
@@ -722,8 +757,7 @@ def molar_mass(formula):
                     break
             coeff = int(formula[j + 1:k])
             total += mass * coeff
-            i = k - 1
-
+            i = k - 1  # since we need to skip brackets, can't use for loop for i
 
         elif formula[i].isupper():  # the letter is capital (start of new element)
             try:  # we don't know if there are any more letters in the string
@@ -733,7 +767,7 @@ def molar_mass(formula):
                         if formula[i + 2].isnumeric():  # check if next number is coefficient
                             j = i + 2
                             while formula[j].isnumeric():
-                            # check how many consecutive digits there are (so coefficient is not limited to one digit)
+                                # check how many consecutive digits there are
                                 if j + 1 < len(formula):
                                     j = j + 1
                                 else:
@@ -742,7 +776,7 @@ def molar_mass(formula):
                             coeff = int(formula[i + 2:j])
                     except IndexError:
                         pass
-                elif formula[i + 1].isnumeric():
+                elif formula[i + 1].isnumeric():  # same thing as before just if the element is only one letter long
                     j = i + 1
                     while formula[j].isnumeric():
                         if j + 1 < len(formula):
@@ -757,7 +791,6 @@ def molar_mass(formula):
             except IndexError:
                 element = formula[i]
 
-            # add to parsed formula
             if coeff is None:
                 coeff = 1
 
@@ -776,7 +809,7 @@ def molar_mass(formula):
 
 # outputs  (mostly just formatting and creating embeds)
 
-def show_equation():
+def show_equation():   # display loaded equation
     embed = discord.Embed(title="Loaded Equation:",
                           description=''.join(LoadedEquation[0]),
                           color=4905928)
@@ -789,7 +822,7 @@ def show_equation():
     return embed
 
 
-def convert_subscript(text, direction=True):   # subscript for formula numbers; true means convert to, false convert from
+def convert_subscript(text, direction=True):   # subscript for numbers; true means convert to, false convert from
     new_text = []
     if direction:
         for i in text:
@@ -805,6 +838,7 @@ def convert_subscript(text, direction=True):   # subscript for formula numbers; 
             else:
                 new_text.append(i)
         return ''.join(new_text)
+
 
 def read_element(search):
     global CURSOR
@@ -870,4 +904,6 @@ if __name__ == "__main__":
     else:
         CONNECTION = sqlite3.Connection(DATABASE)
         CURSOR = CONNECTION.cursor()
-    Bot.run(TOKEN)  # start main loop
+    Bot.run(TOKEN)
+    # starts main event loop
+    # script will create discord session to bot matching token, then run code when command is activated
