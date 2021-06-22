@@ -397,6 +397,8 @@ Example: +stoich cal 1 grams 20.3 3 grams```''',
                 await ctx.send(f"```The calculated mass of {output_molecule} is {round(moles * mole_mass, 5)} grams.```")
             else:
                 await ctx.send(f"```The calculated quantity of {output_molecule} is {round(moles, 5)} moles.```")
+    else:
+        await ctx.send("```Invalid command format | +stoich help```")
 
 
 @Bot.command(name='balance', aliases=["b", 'bal'])
