@@ -15,15 +15,15 @@
 3. Install the libraries discord.py (mandatory) and sympy (optional, but more complicated balancing functions require it):
 Since all libraries are registered to PyPI,
    
-On Windows, use the commands:
+    On Windows, use the commands:
 
-`py -3 -m pip install discord.py | py -3 -m pip install sympy`
+    `py -3 -m pip install discord.py | py -3 -m pip install sympy`
 
-On Linux or Mac:
+    On Linux or Mac:
 
-`python3 -m pip install -U discord.py | python3 -m pip install sympy.`
+    `python3 -m pip install -U discord.py | python3 -m pip install sympy.`
 
-(Sympy has dependency on mpmath library which may need to be installed too: [py -3/python3] -m pip install mpmath)
+    (Sympy has dependency on mpmath library which may need to be installed too: [py -3/python3] -m pip install mpmath)
    
 
 4. Run code, and hope nothing goes wrong (because then I lose marks).
