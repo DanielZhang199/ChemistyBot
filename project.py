@@ -4,7 +4,6 @@ author: Daniel Zhang
 data-created: 2021-06-11
 '''
 # standard library (os module is only used to environmental variables)
-import os
 import pathlib
 import sqlite3
 import re
@@ -12,9 +11,6 @@ import re
 # required dependency | py -m pip install discord.py  (for windows)
 import discord
 from discord.ext import commands
-
-# py -m pip install python-dotenv (remove later)
-from dotenv import load_dotenv
 
 # optional dependency for equation balancing | py -m pip install sympy
 try:
@@ -40,7 +36,7 @@ LoadedEquation = []  # this will just be a list in a list to send data between f
 EquationCoeff = []  # stores the coefficient, then name of molecule (for easier stoich calculation code)
 
 
-# coroutines (events)  (the flowchart is going to be a mess)
+# coroutines (I already know the flowchart is going to be a mess)
 
 
 @Bot.event
@@ -52,19 +48,24 @@ async def on_ready():  # when bot connects
 
 
 @Bot.event
-async def on_disconnect():
+async def on_disconnect():  # when bot disconnects
     print(f"{Bot.user} has disconnected")
 
-# inputs/outputs
+
+@Bot.event
+async def on_command_error(ctx, error):  # when error (invalid command) is raised
+    await ctx.send(f"```Error: {str(error)} | type +help for list of commands```")
+
+# inputs/outputs  (commands)
 
 
 @Bot.command(name='help', aliases=['h', 'commands'])  # custom help command
-async def help_message(ctx):  # bot command event passes context (ctx) parameter always, and will crash if function does not accept parameters
+async def help_message(ctx):  # bot commands pass context (ctx) parameter always, and will crash if coroutine does not accept at least one parameter
     # ctx contains the message object, as well as lets you reply directly with ctx.send('Message')
-    embed = discord.Embed(title="Untitled Chemistry Bot",
+    embed = discord.Embed(title="CSE2910 Chemistry Bot",
                           description='''Bot that helps with chemistry and whilst taking up my processor power and RAM.                    
-\nEquation balancing code was written following a guide by Mohammad-Ali Bandzar:
-\n(Bandzar, M.-A. (2020, May 27). Balancing Chemical Equations With Python. Medium. Retrieved from: https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b. )''',
+\nCredit to Mohammad-Ali Bandzar for equation balancing code:
+\n(Bandzar, M.-A. (2020, May 27). Balancing Chemical Equations With Python. Medium. https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b.)''',
                           color=5935975)
     embed.add_field(name="Element/Ion Database",
                     value='''```
@@ -99,19 +100,6 @@ async def help_message(ctx):  # bot command event passes context (ctx) parameter
 async def hello(ctx):
     message = await ctx.send(f"Hello! {ctx.author.mention}")
     await message.add_reaction('\N{THUMBS UP SIGN}')
-
-
-@Bot.command(name='purge')  # delete messages (just testing functionality, remove later)
-async def say(ctx, arg=0):
-    try:
-        number = int(arg)
-        if number > 10:
-            number = 1
-    except ValueError:
-        number = 0
-    if ctx.message.author.id == 308971649070268416:
-        deleted = await ctx.message.channel.purge(limit=number)
-        # await ctx.send(f"```Deleted {len(deleted)} messages from channel {ctx.message.channel}```")
 
 
 @Bot.command(name='database', aliases=['data', 'dat', 'd'])  # reading, writing, deleting from database
@@ -397,10 +385,10 @@ Example: +stoich cal 1 grams 20.3 3 grams```''',
             else:  # if given unit was moles
                 moles = value
 
-            moles = moles * ratio  # calculate moles of requested molecule
+            moles = moles * ratio  # calculate moles of requested molecule, convert from moles
             output_molecule = convert_subscript(EquationCoeff[output_index][1])
 
-            if output_unit.lower().startswith('g'):  # if user inputted grams
+            if output_unit.lower().startswith('g'):  # if user wants answer in grams
                 mole_mass = molar_mass(EquationCoeff[output_index][1])
                 # we can reuse variable names since they are no longer needed
                 if mole_mass is None:
@@ -466,7 +454,7 @@ def balance(equation):  # very verbose comments (since I don't fully understand 
     products = equation[1].split('+')
 
     # starting here this is NOT MY ORIGINAL CODE: credit to Mohammad-Ali Bandzar:
-    # Bandzar, M.-A. (2020, May 27). Balancing Chemical Equations With Python. Medium. Retrieved from: https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b.
+    # Bandzar, M.-A. (2020, May 27). Balancing Chemical Equations With Python. Medium. https://medium.com/swlh/balancing-chemical-equations-with-python-837518c9075b.
     for i in range(len(reactants)):  # puts terms into matrix
         add_matrix(reactants[i], i, 1)
     for i in range(len(products)):
@@ -618,7 +606,7 @@ def balance_ionic(pos_ion, neg_ion):
                 coeff1 = ''
             if not coeff2 == 1:  # need brackets for polyatomic ions
                 if len(neg_ion) > 2 or len(neg_ion) == 2 and neg_ion.isupper():  # if longer than 2 or has 2 capitals (2 elements)
-                    neg_ion = f"({pos_ion})"
+                    neg_ion = f"({neg_ion})"
                 else:  # or theres a number in the ion formula
                     for i in neg_ion:
                         if i.isnumeric():
@@ -699,12 +687,12 @@ def load_elements(table):
     content.pop(0)  # delete table header
     for i in range(len(content)):
         content[i] = content[i].split(',')
-        content[i][-1] = content[i][-1][:-1]  # split each row into 2D array and remove new line
+        content[i][-1] = content[i][-1][:-1]  # split each row into 2D array and remove new line (\n)
     print("Initializing element database")
     CURSOR.execute(''' CREATE TABLE elements(
     name TEXT NOT NULL, symbol TEXT NOT NULL, atomic_number INTEGER PRIMARY KEY, charge TEXT,
     molar_mass TEXT NOT NULL, group_name TEXT NOT NULL, electronegativity REAL, state TEXT NOT NULL);''')
-    # while all molar masses are REAL values, they are stored as text to keep significant figures
+    # while all molar masses are REAL values, they are stored as strings to keep significant figures when viewing
 
     # filling table
     for i in range(len(content)):
@@ -892,10 +880,10 @@ def read_ion(search):  # similar code to read_element
 
 
 if __name__ == "__main__":
-    load_dotenv()
-    TOKEN = os.getenv('token')  # replace with: TOKEN = '{BOT_TOKEN}'
-
-    if not (pathlib.Path.cwd() / DATABASE).exists(): # create tables
+    TOKEN = 'ODU2OTE4OTM0Njc0NzM1MTE0.YNIB8g.u1FK2_qy7FuKkvoKximaXyCrxek'
+    # If using this token, invite to a server with this link, (direct messaging should also work):
+    # https://discord.com/api/oauth2/authorize?client_id=856918934674735114&permissions=2148006976&scope=bot
+    if not (pathlib.Path.cwd() / DATABASE).exists():  # create tables
         CONNECTION = sqlite3.Connection(DATABASE)
         CURSOR = CONNECTION.cursor()
         load_elements(PERIODIC_TABLE)
