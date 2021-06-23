@@ -3,7 +3,7 @@ title: Discord chemistry bot
 author: Daniel Zhang
 data-created: 2021-06-11
 '''
-# standard library (os module is only used to environmental variables)
+# standard library
 import pathlib
 import sqlite3
 import re
@@ -25,15 +25,18 @@ DATABASE = 'project.db'
 PERIODIC_TABLE = 'periodic_table.csv'  # taken from chemistry data booklet
 POLYATOMIC_IONS = 'polyatomic_ions.csv'
 
+DATABASE_EXISTS = (pathlib.Path.cwd() / DATABASE).exists()
+CONNECTION = sqlite3.Connection(DATABASE)
+CURSOR = CONNECTION.cursor()
+
 # discord markdown has no subscript formatting option
 Subscript = {"1": "₁", "2": "₂", "3": "₃", "4": "₄", "5": "₅", "6": "₆", "7": "₇", "8": "₈", "9": "₉", "0": "₀", }
 Anti_Subscript = {i: j for j, i in Subscript.items()}
 
-# Lists used as global/memory variables for balancing/stoich
 CoefficientMatrix = []  # matrix of the number of each element of an unbalanced equation
 ElementList = []  # names of element for each matrix row
 LoadedEquation = []  # this will just be a list in a list to send data between functions
-EquationCoeff = []  # stores the coefficient, then name of molecule (for easier stoich calculation code)
+EquationCoeff = []  # stores the coefficient, then name of molecule
 
 
 # coroutines (I already know the flowchart is going to be a mess)
@@ -445,10 +448,11 @@ def transpose(matrix):
     return new_matrix
 
 
-def balance(equation):  # very verbose comments (since I don't fully understand it)
+def balance(equation):
+
     CoefficientMatrix.clear()
     ElementList.clear()
-    # in case there was error midway and function crashes
+    # in case there was error midway and function crashes, clear lists
     equation = equation.split('=')
 
     # get reactants and products in separate lists (have to make sure there are multiple terms '+' first)
@@ -510,7 +514,7 @@ def balance(equation):  # very verbose comments (since I don't fully understand 
 
 
 def add_matrix(compound, row, side):  # also NOT MY CODE (works with previous code)
-    # need reg expressions to parse user input without comparing to entire periodic table
+    # reg expressions to parse user input without comparing to entire periodic table
     segments = re.split('(\([A-Za-z0-9]*\)[0-9])', compound)  # find anything surrounded by parenthesis
     # therefore does not support polyatomic decomposition reactions (which are beyond scope of high school chem)
     for segment in segments:
@@ -731,8 +735,8 @@ def molar_mass(formula):
         coeff = None
         element = None
 
-        if formula[i] == '(':  # this code was added later to calculate for all polyatomic ionic compounds
-            # basically it just calculates the molar mass of formula inside brackets with this function (recursive)
+        if formula[i] == '(':
+            # calculates the molar mass of formula inside brackets with this function (recursive)
             # then multiplies it by the coefficient at the end
             j = i + 1
             while formula[j] != ')':
@@ -795,7 +799,7 @@ def molar_mass(formula):
 
         i += 1
 
-    return round(total, 2)  # does not use significant digits (not enough time to implement)
+    return round(total, 2)  # does not use significant digits
 
 # outputs  (mostly just formatting and creating embeds)
 
@@ -812,7 +816,8 @@ def show_equation():   # display loaded equation
     return embed
 
 
-def convert_subscript(text, direction=True):   # subscript for numbers; true means convert to, false convert from
+def convert_subscript(text, direction=True):
+    # convert tosubscript for numbers; true means convert to, false convert from
     new_text = []
     if direction:
         for i in text:
@@ -830,7 +835,7 @@ def convert_subscript(text, direction=True):   # subscript for numbers; true mea
         return ''.join(new_text)
 
 
-def read_element(search):
+def read_element(search):  # search database for entry matching given symbol
     global CURSOR
     data = CURSOR.execute("SELECT * FROM elements WHERE symbol = ? ;", [search]).fetchone()
     if data is not None:  # get data into list from tuple
@@ -883,17 +888,12 @@ def read_ion(search):  # similar code to read_element
 
 if __name__ == "__main__":
     TOKEN = 'ODU2OTE4OTM0Njc0NzM1MTE0.YNIB8g.u1FK2_qy7FuKkvoKximaXyCrxek'
-    # If using this token, invite to a server with this link, (direct messaging should also work):
+    # If using this token, invite to a server with this link:
     # https://discord.com/api/oauth2/authorize?client_id=856918934674735114&permissions=2148006976&scope=bot
-    if not (pathlib.Path.cwd() / DATABASE).exists():  # create tables
-        CONNECTION = sqlite3.Connection(DATABASE)
-        CURSOR = CONNECTION.cursor()
+    if not DATABASE_EXISTS:  # create tables
         load_elements(PERIODIC_TABLE)
         load_ions(POLYATOMIC_IONS)
 
-    else:
-        CONNECTION = sqlite3.Connection(DATABASE)
-        CURSOR = CONNECTION.cursor()
     Bot.run(TOKEN)
     # starts main event loop
-    # script will create discord session to bot matching token, then run code when command is activated
+    # script will create discord session to the bot matching the token
