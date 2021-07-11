@@ -107,7 +107,7 @@ async def hello(ctx):
 
 @Bot.command(name='database', aliases=['data', 'dat', 'd'])  # reading, writing, deleting from database
 # aliases are just alternate names for command (+database and +data will run the same command)
-async def output_database(ctx, subcmd='', arg1=None, arg2=None, arg3=None):  # takes context, subcommand, and 3 arguements
+async def database(ctx, subcmd='', arg1=None, arg2=None, arg3=None):  # takes context, subcommand, and 3 arguements
     # variables are given default values of 'None' so that error messages can be displayed
     # subcmd, arg1-3 are all arguments (the first 4 words user types after command), and have default values
     if subcmd.lower().startswith("e"):  # search periodic table for element
@@ -516,7 +516,6 @@ def balance(equation):
 def add_matrix(compound, row, side):  # also NOT MY CODE (works with previous code)
     # reg expressions to parse user input without comparing to entire periodic table
     segments = re.split('(\([A-Za-z0-9]*\)[0-9])', compound)  # find anything surrounded by parenthesis
-    # therefore does not support polyatomic decomposition reactions (which are beyond scope of high school chem)
     for segment in segments:
         if segment.startswith("("):
             segment = re.split('\)([0-9]*)', segment)  # find a ')' followed by a number of digits
@@ -529,8 +528,6 @@ def add_matrix(compound, row, side):  # also NOT MY CODE (works with previous co
         # returns a list of of either element symbol or empty string/number in alternating order
         # empty string means 1, and first number/empty string is the coefficient of the entire reactant
         # CH4 becomes ['', 'C', '', 'H', '4']
-        # find a element (capital followed by optional lower-case)
-        # this means that elements don't need to be real, just a capital followed by optional lowercase letter
 
         i = 0
         while i < len(parsed_list) - 1:  # read the list of elements/numbers
