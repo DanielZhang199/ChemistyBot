@@ -170,6 +170,7 @@ Supported Conversions:
         return
     if value.isnumeric():  # is integer
         decimal_places = 1
+        value = float(value)
     else:
         try:
             decimal_places = len(value.split('.')[1])
