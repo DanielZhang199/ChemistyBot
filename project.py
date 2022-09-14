@@ -885,9 +885,8 @@ def read_ion(search):  # similar code to read_element
 
 
 if __name__ == "__main__":
-    TOKEN = 'ODU2OTE4OTM0Njc0NzM1MTE0.YNIB8g.u1FK2_qy7FuKkvoKximaXyCrxek'
-    # If using this token, invite to a server with this link:
-    # https://discord.com/api/oauth2/authorize?client_id=856918934674735114&permissions=2148006976&scope=bot
+    TOKEN = ''  # replace string with string of your bot token
+    # Create your own bot from discord developer portal; im sure you'll figure out how
     if not DATABASE_EXISTS:  # create tables
         load_elements(PERIODIC_TABLE)
         load_ions(POLYATOMIC_IONS)
